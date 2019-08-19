@@ -232,8 +232,9 @@ impl fmt::Display for Identifier {
 	}
 }
 
-#[derive(Default, Clone, PartialEq, Serialize, Deserialize, Zeroize)]
-#[zeroize(drop)]
+//#[derive(Default, Clone, PartialEq, Serialize, Deserialize, Zeroize)]
+//#[zeroize(drop)]
+#[derive(Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BlindingFactor([u8; SECRET_KEY_SIZE]);
 
 // Dummy `Debug` implementation that prevents secret leakage.
