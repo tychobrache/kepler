@@ -35,6 +35,8 @@ use std::cmp::{max, min};
 use std::sync::Arc;
 use std::{error, fmt};
 
+use crate::core::asset::Asset;
+
 // Enum of various supported kernel "features".
 enum_from_primitive! {
 	/// Various flavors of tx kernel.
@@ -1151,6 +1153,8 @@ pub struct Input {
 		deserialize_with = "secp_ser::commitment_from_hex"
 	)]
 	pub commit: Commitment,
+
+	pub asset: Asset,
 }
 
 impl DefaultHashable for Input {}
@@ -1262,6 +1266,8 @@ pub struct Output {
 		deserialize_with = "secp_ser::rangeproof_from_hex"
 	)]
 	pub proof: RangeProof,
+
+	pub asset: Asset,
 }
 
 impl DefaultHashable for Output {}

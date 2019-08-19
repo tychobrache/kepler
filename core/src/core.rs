@@ -14,6 +14,7 @@
 
 //! Core types
 
+pub mod asset;
 pub mod block;
 pub mod block_sums;
 pub mod committed;
@@ -136,5 +137,4 @@ mod test {
 		assert!("5000000000.0" == amount_to_hr_string(5_000_000_000_000_000_000, true));
 		assert!("66.6" == amount_to_hr_string(66600000000, true));
 	}
-
 }
