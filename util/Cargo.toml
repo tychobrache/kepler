@@ -24,9 +24,9 @@ zip = { version = "0.4", default-features = false }
 parking_lot = {version = "0.6"}
 zeroize = "0.9"
 
-[dependencies.grin_secp256k1zkp]
-#git = "https://github.com/keplernetwork/rust-secp256k1-zkp"
+[dependencies.secp256k1zkp]
+#git = "https://github.com/kepler-007/secp256k1zkp"
 #tag = "kepler_integration_29"
-#path = "../../rust-secp256k1-zkp"
-version = "0.7.7"
+path = "../../secp256k1zkp"
+version="0.7.7"
 features = ["bullet-proof-sizing"]
