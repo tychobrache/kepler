@@ -340,7 +340,7 @@ impl Writeable for TxKernelEntry {
 }
 
 impl Readable for TxKernelEntry {
-	fn read(reader: &mut Reader) -> Result<TxKernelEntry, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<TxKernelEntry, ser::Error> {
 		let kernel = TxKernel::read(reader)?;
 		Ok(TxKernelEntry { kernel })
 	}
@@ -1174,6 +1174,7 @@ impl Writeable for Input {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.features.write(writer)?;
 		self.commit.write(writer)?;
+		// TODO asset write ?
 		Ok(())
 	}
 }
@@ -1184,7 +1185,8 @@ impl Readable for Input {
 	fn read(reader: &mut dyn Reader) -> Result<Input, ser::Error> {
 		let features = OutputFeatures::read(reader)?;
 		let commit = Commitment::read(reader)?;
-		Ok(Input::new(features, commit))
+		let asset = Asset::default(); // TODO asset read ?
+		Ok(Input::new(features, commit, asset))
 	}
 }
 
@@ -1195,8 +1197,12 @@ impl Readable for Input {
 impl Input {
 	/// Build a new input from the data required to identify and verify an
 	/// output being spent.
-	pub fn new(features: OutputFeatures, commit: Commitment) -> Input {
-		Input { features, commit }
+	pub fn new(features: OutputFeatures, commit: Commitment, asset: Asset) -> Input {
+		Input {
+			features,
+			commit,
+			asset,
+		}
 	}
 
 	/// The input commitment which _partially_ identifies the output being
@@ -1205,6 +1211,10 @@ impl Input {
 	/// calculate lock_height for coinbase outputs).
 	pub fn commitment(&self) -> Commitment {
 		self.commit
+	}
+
+	pub fn asset(&self) -> Asset {
+		self.asset
 	}
 
 	/// Is this a coinbase input?
@@ -1304,6 +1314,7 @@ impl Readable for Output {
 			features: OutputFeatures::read(reader)?,
 			commit: Commitment::read(reader)?,
 			proof: RangeProof::read(reader)?,
+			asset: Asset::default(), // TODO read ?
 		})
 	}
 }
@@ -1333,6 +1344,11 @@ impl Output {
 	/// Commitment for the output
 	pub fn commitment(&self) -> Commitment {
 		self.commit
+	}
+
+	/// this output asset
+	pub fn asset(&self) -> Asset {
+		self.asset
 	}
 
 	/// Is this a coinbase kernel?
@@ -1408,11 +1424,12 @@ impl OutputIdentifier {
 	}
 
 	/// Converts this identifier to a full output, provided a RangeProof
-	pub fn into_output(self, proof: RangeProof) -> Output {
+	pub fn into_output(self, proof: RangeProof, asset: Asset) -> Output {
 		Output {
 			proof,
 			features: self.features,
 			commit: self.commit,
+			asset: asset,
 		}
 	}
 
@@ -1599,6 +1616,7 @@ mod test {
 		let input = Input {
 			features: OutputFeatures::Coinbase,
 			commit: commit,
+			asset: Asset::default(),
 		};
 
 		let short_id = input.short_id(&block_hash, nonce);

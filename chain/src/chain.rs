@@ -15,6 +15,17 @@
 //! Facade and handler for the rest of the blockchain implementation
 //! and mostly the chain pipeline.
 
+use std::collections::HashMap;
+use std::fs::{self, File};
+use std::io::Read;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use kepler_store::Error::NotFoundErr;
+
+use crate::core::core::asset::Asset;
 use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::verifier_cache::VerifierCache;
@@ -34,14 +45,6 @@ use crate::types::{
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::RwLock;
-use kepler_store::Error::NotFoundErr;
-use std::collections::HashMap;
-use std::fs::{self, File};
-use std::io::Read;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
 pub const MAX_ORPHAN_SIZE: usize = 200;
@@ -645,7 +648,7 @@ impl Chain {
 	/// Currently does not write these to disk and simply deserializes
 	/// the provided data.
 	/// TODO - Write this data to disk and validate the rebuilt kernel MMR.
-	pub fn kernel_data_write(&self, reader: &mut Read) -> Result<(), Error> {
+	pub fn kernel_data_write(&self, reader: &mut dyn Read) -> Result<(), Error> {
 		let mut count = 0;
 		let mut stream = StreamingReader::new(reader, Duration::from_secs(1));
 		while let Ok(_kernel) = TxKernelEntry::read(&mut stream) {
@@ -1138,6 +1141,7 @@ impl Chain {
 				commit: x.commit,
 				features: x.features,
 				proof: y,
+				asset: Asset::default(), // TODO use asset as params to query
 			});
 		}
 		Ok((outputs.0, max_index, output_vec))

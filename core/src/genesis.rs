@@ -29,6 +29,7 @@ use crate::util::secp::constants::SINGLE_BULLET_PROOF_SIZE;
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::secp::Signature;
 
+use crate::core::asset::Asset;
 use crate::core::hash::Hash;
 use crate::keychain::BlindingFactor;
 
@@ -162,6 +163,7 @@ pub fn genesis_floo() -> core::Block {
 				146, 89, 203, 114, 86, 116, 128, 83, 121, 128,
 			],
 		},
+		asset: Asset::default(),
 	};
 	gen.with_reward(output, kernel)
 }
@@ -280,6 +282,7 @@ pub fn genesis_main() -> core::Block {
 				146, 89, 203, 114, 86, 116, 128, 83, 121, 128,
 			],
 		},
+		asset: Asset::default(),
 	};
 	gen.with_reward(output, kernel)
 }

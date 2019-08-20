@@ -25,11 +25,13 @@
 //! build::transaction(vec![input_rand(75), output_rand(42), output_rand(32),
 //!   with_fee(1)])
 
+use kepler_keychain::SwitchCommitmentType;
+
+use crate::core::asset::Asset;
 use crate::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
 use crate::keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
 use crate::libtx::proof::{self, ProofBuild};
 use crate::libtx::{aggsig, Error};
-use kepler_keychain::SwitchCommitmentType;
 
 /// Context information available to transaction combinators.
 pub struct Context<'a, K, B>
@@ -52,7 +54,12 @@ pub type Append<K, B> = dyn for<'a> Fn(
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
-fn build_input<K, B>(value: u64, features: OutputFeatures, key_id: Identifier) -> Box<Append<K, B>>
+fn build_input<K, B>(
+	asset: Asset,
+	value: u64,
+	features: OutputFeatures,
+	key_id: Identifier,
+) -> Box<Append<K, B>>
 where
 	K: Keychain,
 	B: ProofBuild,
@@ -63,7 +70,7 @@ where
 				.keychain
 				.commit(value, &key_id, &SwitchCommitmentType::Regular)
 				.unwrap(); // TODO: proper support for different switch commitment schemes
-			let input = Input::new(features, commit);
+			let input = Input::new(features, commit, asset);
 			(
 				tx.with_input(input),
 				kern,
@@ -75,7 +82,7 @@ where
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
-pub fn input<K, B>(value: u64, key_id: Identifier) -> Box<Append<K, B>>
+pub fn input<K, B>(asset: Asset, value: u64, key_id: Identifier) -> Box<Append<K, B>>
 where
 	K: Keychain,
 	B: ProofBuild,
@@ -84,7 +91,7 @@ where
 		"Building input (spending regular output): {}, {}",
 		value, key_id
 	);
-	build_input(value, OutputFeatures::Plain, key_id)
+	build_input(asset, value, OutputFeatures::Plain, key_id)
 }
 
 /// Adds a coinbase input spending a coinbase output.
@@ -94,12 +101,12 @@ where
 	B: ProofBuild,
 {
 	debug!("Building input (spending coinbase): {}, {}", value, key_id);
-	build_input(value, OutputFeatures::Coinbase, key_id)
+	build_input(Asset::default(), value, OutputFeatures::Coinbase, key_id)
 }
 
 /// Adds an output with the provided value and key identifier from the
 /// keychain.
-pub fn output<K, B>(value: u64, key_id: Identifier) -> Box<Append<K, B>>
+pub fn output<K, B>(asset: Asset, value: u64, key_id: Identifier) -> Box<Append<K, B>>
 where
 	K: Keychain,
 	B: ProofBuild,
@@ -129,6 +136,7 @@ where
 					features: OutputFeatures::Plain,
 					commit: commit,
 					proof: rproof,
+					asset: asset,
 				}),
 				kern,
 				sum.add_key_id(key_id.to_value_path(value)),
@@ -314,9 +322,9 @@ mod test {
 
 		let tx = transaction(
 			vec![
-				input(10, key_id1),
-				input(12, key_id2),
-				output(20, key_id3),
+				input(Asset::default(), 10, key_id1),
+				input(Asset::default(), 12, key_id2),
+				output(Asset::default(), 20, key_id3),
 				with_fee(2),
 			],
 			&keychain,
@@ -339,9 +347,9 @@ mod test {
 
 		let tx = transaction(
 			vec![
-				input(10, key_id1),
-				input(12, key_id2),
-				output(20, key_id3),
+				input(Asset::default(), 10, key_id1),
+				input(Asset::default(), 12, key_id2),
+				output(Asset::default(), 20, key_id3),
 				with_fee(2),
 			],
 			&keychain,
@@ -362,7 +370,11 @@ mod test {
 		let vc = verifier_cache();
 
 		let tx = transaction(
-			vec![input(6, key_id1), output(2, key_id2), with_fee(4)],
+			vec![
+				input(Asset::default(), 6, key_id1),
+				output(Asset::default(), 2, key_id2),
+				with_fee(4),
+			],
 			&keychain,
 			&builder,
 		)

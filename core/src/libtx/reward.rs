@@ -14,7 +14,10 @@
 
 //! Builds the blinded output and related signature proof for the block
 //! reward.
+use kepler_keychain::SwitchCommitmentType;
+
 use crate::consensus::reward;
+use crate::core::asset::Asset;
 use crate::core::transaction::kernel_sig_msg;
 use crate::core::{KernelFeatures, Output, OutputFeatures, TxKernel};
 use crate::keychain::{Identifier, Keychain};
@@ -24,7 +27,6 @@ use crate::libtx::{
 	proof::{self, ProofBuild},
 };
 use crate::util::{secp, static_secp_instance};
-use kepler_keychain::SwitchCommitmentType;
 
 /// output a reward output
 pub fn output<K, B>(
@@ -52,6 +54,7 @@ where
 		features: OutputFeatures::Coinbase,
 		commit: commit,
 		proof: rproof,
+		asset: Asset::default(),
 	};
 
 	let secp = static_secp_instance();
