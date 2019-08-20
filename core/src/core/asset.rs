@@ -1,7 +1,8 @@
 use serde::de::{Deserialize, Deserializer, SeqAccess, Visitor};
 use serde::ser::{Serialize, SerializeSeq, Serializer};
+use std::fmt::{Debug, Formatter, Result as FmtResult};
 
-use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
+use crate::ser::{self, Readable, Reader, Writeable, Writer};
 
 use crate::util::secp::ffi::Generator;
 
@@ -88,5 +89,23 @@ impl<'d> Deserialize<'d> for Asset {
 		}
 
 		deserializer.deserialize_seq(AssetVistor)
+	}
+}
+
+impl Readable for Asset {
+	fn read(reader: &mut dyn Reader) -> Result<Asset, ser::Error> {
+		let vec = reader.read_fixed_bytes(64)?;
+		let mut bytes = [0u8; 64];
+		bytes.copy_from_slice(&vec[..]);
+
+		Ok(Asset::from_bytes(bytes))
+	}
+}
+
+impl Writeable for Asset {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		let bytes: Vec<u8> = self.0.to_vec();
+		writer.write_fixed_bytes(&bytes)?;
+		Ok(())
 	}
 }

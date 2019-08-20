@@ -1174,7 +1174,7 @@ impl Writeable for Input {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.features.write(writer)?;
 		self.commit.write(writer)?;
-		// TODO asset write ?
+		self.asset.write(writer)?;
 		Ok(())
 	}
 }
@@ -1185,7 +1185,7 @@ impl Readable for Input {
 	fn read(reader: &mut dyn Reader) -> Result<Input, ser::Error> {
 		let features = OutputFeatures::read(reader)?;
 		let commit = Commitment::read(reader)?;
-		let asset = Asset::default(); // TODO asset read ?
+		let asset = Asset::read(reader)?;
 		Ok(Input::new(features, commit, asset))
 	}
 }
@@ -1302,6 +1302,7 @@ impl Writeable for Output {
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			writer.write_bytes(&self.proof)?
 		}
+		self.asset.write(writer)?;
 		Ok(())
 	}
 }
@@ -1314,7 +1315,7 @@ impl Readable for Output {
 			features: OutputFeatures::read(reader)?,
 			commit: Commitment::read(reader)?,
 			proof: RangeProof::read(reader)?,
-			asset: Asset::default(), // TODO read ?
+			asset: Asset::read(reader)?,
 		})
 	}
 }
