@@ -41,7 +41,7 @@ fn simple_tx_ser() {
 	let tx = tx2i1o();
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &tx).expect("serialization failed");
-	let target_len = 955;
+	let target_len = 1147;
 	assert_eq!(vec.len(), target_len,);
 }
 

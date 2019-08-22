@@ -1614,7 +1614,7 @@ mod test {
 		let nonce = 0;
 
 		let short_id = input.short_id(&block_hash, nonce);
-		assert_eq!(short_id, ShortId::from_hex("c4b05f2ba649").unwrap());
+		assert_eq!(short_id, ShortId::from_hex("8291175799d0").unwrap());
 
 		// now generate the short_id for a *very* similar output (single feature flag
 		// different) and check it generates a different short_id
@@ -1625,7 +1625,7 @@ mod test {
 		};
 
 		let short_id = input.short_id(&block_hash, nonce);
-		assert_eq!(short_id, ShortId::from_hex("3f0377c624e9").unwrap());
+		assert_eq!(short_id, ShortId::from_hex("a5f15c64ecde").unwrap());
 	}
 
 	#[test]

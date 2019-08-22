@@ -233,8 +233,9 @@ pub fn verify_partial_sig(
 /// use core::core::transaction::{kernel_sig_msg, KernelFeatures};
 /// use core::core::{Output, OutputFeatures};
 /// use keychain::{Keychain, ExtKeychain, SwitchCommitmentType};
+/// use core::core::asset::Asset;
 ///
-///
+/// let asset = Asset::default();
 /// let height = 20;
 /// let secp = Secp256k1::with_caps(ContextFlag::Commit);
 /// let keychain = ExtKeychain::from_random_seed(false).unwrap();
@@ -242,13 +243,14 @@ pub fn verify_partial_sig(
 /// let value = reward(height, fees);
 /// let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 /// let switch = &SwitchCommitmentType::Regular;
-/// let commit = keychain.commit(value, &key_id, switch).unwrap();
+/// let commit = keychain.commit(value, &key_id, switch, asset.into()).unwrap();
 /// let builder = proof::ProofBuilder::new(&keychain);
-/// let rproof = proof::create(&keychain, &builder, value, &key_id, switch, commit, None).unwrap();
+/// let rproof = proof::create(&keychain, &builder, value, &key_id, switch, commit, None, asset).unwrap();
 /// let output = Output {
 ///		features: OutputFeatures::Coinbase,
 ///		commit: commit,
 ///		proof: rproof,
+///   asset: asset
 /// };
 /// let over_commit = secp.commit_value(reward(height, fees)).unwrap();
 /// let out_commit = output.commitment();
@@ -300,9 +302,11 @@ where
 /// use util::secp::{ContextFlag, Secp256k1};
 /// use core::core::transaction::{kernel_sig_msg, KernelFeatures};
 /// use core::core::{Output, OutputFeatures};
+/// use core::core::asset::Asset;
 /// use keychain::{Keychain, ExtKeychain, SwitchCommitmentType};
 ///
 /// // Create signature
+/// let asset = Asset::default();
 /// let height = 20;
 /// let secp = Secp256k1::with_caps(ContextFlag::Commit);
 /// let keychain = ExtKeychain::from_random_seed(false).unwrap();
@@ -310,13 +314,15 @@ where
 /// let value = reward(height, fees);
 /// let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 /// let switch = &SwitchCommitmentType::Regular;
-/// let commit = keychain.commit(value, &key_id, switch).unwrap();
+/// let commit = keychain.commit(value, &key_id, switch, asset.into()).unwrap();
 /// let builder = proof::ProofBuilder::new(&keychain);
-/// let rproof = proof::create(&keychain, &builder, value, &key_id, switch, commit, None).unwrap();
+/// let rproof = proof::create(&keychain, &builder, value, &key_id, switch, commit, None, asset)
+///                  .unwrap();
 /// let output = Output {
 ///		features: OutputFeatures::Coinbase,
 ///		commit: commit,
 ///		proof: rproof,
+///   asset: asset
 /// };
 /// let over_commit = secp.commit_value(reward(height, fees)).unwrap();
 /// let out_commit = output.commitment();

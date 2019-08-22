@@ -305,7 +305,7 @@ mod test {
 		);
 		assert_eq!(
 			gen_bin.hash().to_hex(),
-			"c0fd577221d9c4421aea501ab011c94a0df1598eb4fee9fb3f402d4e5f9690d3"
+			"c13086573772b53bb3d074ebd633c67c87f4a9a197936077851b73853dc60ee0"
 		);
 	}
 
@@ -321,7 +321,7 @@ mod test {
 		);
 		assert_eq!(
 			gen_bin.hash().to_hex(),
-			"d6b31a6abc2700977ec3a6554aaee0d5a007f0785655cbbb838b1a9d0c102210"
+			"239de6437d03edbc9808f6553af129fa329c0e5cc95dc38fba273d2af165c635"
 		);
 	}
 }
