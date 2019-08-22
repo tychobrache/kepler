@@ -474,7 +474,7 @@ mod tests {
 		)
 		.unwrap();
 		assert!(verify(&keychain.secp(), commit.clone(), proof.clone(), None).is_ok());
-		let rewind = rewind(keychain.secp(), &builder, commit, None, proof).unwrap();
+		let rewind = rewind(keychain.secp(), &builder, commit, None, proof, asset).unwrap();
 		assert!(rewind.is_some());
 		let (r_amount, r_id, r_switch) = rewind.unwrap();
 		assert_eq!(r_amount, amount);

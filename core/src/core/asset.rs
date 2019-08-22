@@ -4,6 +4,7 @@ use std::fmt::{Debug, Formatter, Result as FmtResult};
 
 use crate::ser::{self, Readable, Reader, Writeable, Writer};
 
+use crate::util::secp::constants::GENERATOR_H;
 use crate::util::secp::ffi::Generator;
 
 const MAIN_ASSET: [u8; 64] = [0u8; 64];
@@ -23,7 +24,8 @@ impl Asset {
 
 impl Default for Asset {
 	fn default() -> Asset {
-		Asset::from_bytes(MAIN_ASSET)
+		Asset(GENERATOR_H)
+		//Asset::from_bytes(MAIN_ASSET)
 	}
 }
 

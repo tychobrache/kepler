@@ -15,6 +15,7 @@
 pub mod common;
 use crate::common::{new_block, tx1i2o, tx2i1o, txspend1i1o};
 use crate::core::consensus::BLOCK_OUTPUT_WEIGHT;
+use crate::core::core::asset::Asset;
 use crate::core::core::block::Error;
 use crate::core::core::hash::Hashed;
 use crate::core::core::id::ShortIdentifiable;
@@ -45,6 +46,7 @@ fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
 // TODO: make this fast enough or add similar but faster test?
 #[allow(dead_code)]
 fn too_large_block() {
+	let asset = Asset::default();
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let max_out = global::max_block_weight() / BLOCK_OUTPUT_WEIGHT;
@@ -56,11 +58,14 @@ fn too_large_block() {
 
 	let mut parts = vec![];
 	for _ in 0..max_out {
-		parts.push(output(5, pks.pop().unwrap()));
+		parts.push(output(asset, 5, pks.pop().unwrap()));
 	}
 
 	let now = Instant::now();
-	parts.append(&mut vec![input(500000, pks.pop().unwrap()), with_fee(2)]);
+	parts.append(&mut vec![
+		input(asset, 500000, pks.pop().unwrap()),
+		with_fee(2),
+	]);
 	let tx = build::transaction(parts, &keychain, &builder).unwrap();
 	println!("Build tx: {}", now.elapsed().as_secs());
 
@@ -87,6 +92,7 @@ fn very_empty_block() {
 #[test]
 // builds a block with a tx spending another and check that cut_through occurred
 fn block_with_cut_through() {
+	let asset = Asset::default();
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -95,7 +101,11 @@ fn block_with_cut_through() {
 
 	let mut btx1 = tx2i1o();
 	let mut btx2 = build::transaction(
-		vec![input(7, key_id1), output(5, key_id2.clone()), with_fee(2)],
+		vec![
+			input(asset, 7, key_id1),
+			output(asset, 5, key_id2.clone()),
+			with_fee(2),
+		],
 		&keychain,
 		&builder,
 	)
@@ -456,6 +466,7 @@ fn serialize_deserialize_compact_block() {
 // Duplicate a range proof from a valid output into another of the same amount
 #[test]
 fn same_amount_outputs_copy_range_proof() {
+	let asset = Asset::default();
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = keychain::ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -464,9 +475,9 @@ fn same_amount_outputs_copy_range_proof() {
 
 	let tx = build::transaction(
 		vec![
-			input(7, key_id1),
-			output(3, key_id2),
-			output(3, key_id3),
+			input(asset, 7, key_id1),
+			output(asset, 3, key_id2),
+			output(asset, 3, key_id3),
 			with_fee(1),
 		],
 		&keychain,
@@ -506,6 +517,7 @@ fn same_amount_outputs_copy_range_proof() {
 // Swap a range proof with the right private key but wrong amount
 #[test]
 fn wrong_amount_range_proof() {
+	let asset = Asset::default();
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = keychain::ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -514,9 +526,9 @@ fn wrong_amount_range_proof() {
 
 	let tx1 = build::transaction(
 		vec![
-			input(7, key_id1.clone()),
-			output(3, key_id2.clone()),
-			output(3, key_id3.clone()),
+			input(asset, 7, key_id1.clone()),
+			output(asset, 3, key_id2.clone()),
+			output(asset, 3, key_id3.clone()),
 			with_fee(1),
 		],
 		&keychain,
@@ -525,9 +537,9 @@ fn wrong_amount_range_proof() {
 	.unwrap();
 	let tx2 = build::transaction(
 		vec![
-			input(7, key_id1),
-			output(2, key_id2),
-			output(4, key_id3),
+			input(asset, 7, key_id1),
+			output(asset, 2, key_id2),
+			output(asset, 4, key_id3),
 			with_fee(1),
 		],
 		&keychain,

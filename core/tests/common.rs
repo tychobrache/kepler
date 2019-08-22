@@ -14,6 +14,8 @@
 
 //! Common test functions
 
+use kepler_core::core::asset::Asset;
+
 use crate::keychain::{Identifier, Keychain};
 use kepler_core::core::{
 	block::{Block, BlockHeader},
@@ -29,6 +31,7 @@ use kepler_keychain as keychain;
 
 // utility producing a transaction with 2 inputs and a single outputs
 pub fn tx2i1o() -> Transaction {
+	let asset = Asset::default();
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = keychain::ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -37,9 +40,9 @@ pub fn tx2i1o() -> Transaction {
 
 	build::transaction(
 		vec![
-			input(10, key_id1),
-			input(11, key_id2),
-			output(19, key_id3),
+			input(asset, 10, key_id1),
+			input(asset, 11, key_id2),
+			output(asset, 19, key_id3),
 			with_fee(2),
 		],
 		&keychain,
@@ -50,13 +53,18 @@ pub fn tx2i1o() -> Transaction {
 
 // utility producing a transaction with a single input and output
 pub fn tx1i1o() -> Transaction {
+	let asset = Asset::default();
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = keychain::ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let key_id2 = keychain::ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 
 	build::transaction(
-		vec![input(5, key_id1), output(3, key_id2), with_fee(2)],
+		vec![
+			input(asset, 5, key_id1),
+			output(asset, 3, key_id2),
+			with_fee(2),
+		],
 		&keychain,
 		&builder,
 	)
@@ -67,6 +75,7 @@ pub fn tx1i1o() -> Transaction {
 // and two outputs (one change output)
 // Note: this tx has an "offset" kernel
 pub fn tx1i2o() -> Transaction {
+	let asset = Asset::default();
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = keychain::ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -75,9 +84,9 @@ pub fn tx1i2o() -> Transaction {
 
 	build::transaction(
 		vec![
-			input(6, key_id1),
-			output(3, key_id2),
-			output(1, key_id3),
+			input(asset, 6, key_id1),
+			output(asset, 3, key_id2),
+			output(asset, 1, key_id3),
 			with_fee(2),
 		],
 		&keychain,
@@ -124,8 +133,13 @@ where
 	K: Keychain,
 	B: ProofBuild,
 {
+	let asset = Asset::default();
 	build::transaction(
-		vec![input(v, key_id1), output(3, key_id2), with_fee(2)],
+		vec![
+			input(asset, v, key_id1),
+			output(asset, 3, key_id2),
+			with_fee(2),
+		],
 		keychain,
 		builder,
 	)

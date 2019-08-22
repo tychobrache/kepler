@@ -1528,10 +1528,11 @@ mod test {
 
 	#[test]
 	fn test_kernel_ser_deser() {
+		let asset = Asset::default();
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 		let commit = keychain
-			.commit(5, &key_id, &SwitchCommitmentType::Regular)
+			.commit(5, &key_id, &SwitchCommitmentType::Regular, asset.into())
 			.unwrap();
 
 		// just some bytes for testing ser/deser
@@ -1575,16 +1576,17 @@ mod test {
 
 	#[test]
 	fn commit_consistency() {
+		let asset = Asset::default();
 		let keychain = ExtKeychain::from_seed(&[0; 32], false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 		let commit = keychain
-			.commit(1003, &key_id, &SwitchCommitmentType::Regular)
+			.commit(1003, &key_id, &SwitchCommitmentType::Regular, asset.into())
 			.unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 		let commit_2 = keychain
-			.commit(1003, &key_id, &SwitchCommitmentType::Regular)
+			.commit(1003, &key_id, &SwitchCommitmentType::Regular, asset.into())
 			.unwrap();
 
 		assert!(commit == commit_2);
@@ -1592,15 +1594,17 @@ mod test {
 
 	#[test]
 	fn input_short_id() {
+		let asset = Asset::default();
 		let keychain = ExtKeychain::from_seed(&[0; 32], false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 		let commit = keychain
-			.commit(5, &key_id, &SwitchCommitmentType::Regular)
+			.commit(5, &key_id, &SwitchCommitmentType::Regular, asset.into())
 			.unwrap();
 
 		let input = Input {
 			features: OutputFeatures::Plain,
 			commit: commit,
+			asset: asset,
 		};
 
 		let block_hash =

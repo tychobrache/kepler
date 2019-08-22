@@ -21,21 +21,25 @@ use self::core::libtx::proof;
 use self::core::ser;
 use self::keychain::{ExtKeychain, Keychain};
 use kepler_core as core;
+use kepler_core::core::asset::Asset;
 use kepler_keychain as keychain;
 
 #[test]
 fn test_output_ser_deser() {
+	let asset = Asset::default();
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let switch = &keychain::SwitchCommitmentType::Regular;
-	let commit = keychain.commit(5, &key_id, switch).unwrap();
+	let commit = keychain.commit(5, &key_id, switch, asset.into()).unwrap();
 	let builder = proof::ProofBuilder::new(&keychain);
-	let proof = proof::create(&keychain, &builder, 5, &key_id, switch, commit, None).unwrap();
+	let proof =
+		proof::create(&keychain, &builder, 5, &key_id, switch, commit, None, asset).unwrap();
 
 	let out = Output {
 		features: OutputFeatures::Plain,
 		commit: commit,
 		proof: proof,
+		asset: asset,
 	};
 
 	let mut vec = vec![];
