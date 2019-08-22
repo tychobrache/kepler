@@ -41,14 +41,17 @@ where
 	K: Keychain,
 	B: ProofBuild,
 {
+	let asset = Asset::default();
 	let value = reward(height, fees);
 	// TODO: proper support for different switch commitment schemes
 	let switch = &SwitchCommitmentType::Regular;
-	let commit = keychain.commit(value, key_id, switch)?;
+	let commit = keychain.commit(value, key_id, switch, asset.into())?;
 
 	trace!("Block reward - Pedersen Commit is: {:?}", commit,);
 
-	let rproof = proof::create(keychain, builder, value, key_id, switch, commit, None)?;
+	let rproof = proof::create(
+		keychain, builder, value, key_id, switch, commit, None, asset,
+	)?;
 
 	let output = Output {
 		features: OutputFeatures::Coinbase,

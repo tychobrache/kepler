@@ -23,6 +23,7 @@ use crate::extkey_bip32::{BIP32KeplerHasher, ExtendedPrivKey, ExtendedPubKey};
 use crate::types::{
 	BlindSum, BlindingFactor, Error, ExtKeychainPath, Identifier, Keychain, SwitchCommitmentType,
 };
+use crate::util::secp::ffi::Generator;
 use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::pedersen::Commitment;
 use crate::util::secp::{self, Message, Secp256k1, Signature};
@@ -115,9 +116,10 @@ impl Keychain for ExtKeychain {
 		amount: u64,
 		id: &Identifier,
 		switch: &SwitchCommitmentType,
+		generator: Generator,
 	) -> Result<Commitment, Error> {
 		let key = self.derive_key(amount, id, switch)?;
-		let commit = self.secp.commit(amount, key)?;
+		let commit = self.secp.commit_with_generator(amount, key, generator)?;
 		Ok(commit)
 	}
 
@@ -206,6 +208,7 @@ mod test {
 	use crate::keychain::ExtKeychain;
 	use crate::types::{BlindSum, BlindingFactor, ExtKeychainPath, Keychain};
 	use crate::util::secp;
+	use crate::util::secp::ffi::Generator;
 	use crate::util::secp::key::SecretKey;
 	use crate::SwitchCommitmentType;
 
@@ -223,7 +226,9 @@ mod test {
 
 		// now create a zero commitment using the key on the keychain associated with
 		// the key_id
-		let commit = keychain.commit(0, &key_id, switch).unwrap();
+		let commit = keychain
+			.commit(0, &key_id, switch, Generator::default())
+			.unwrap();
 
 		// now check we can use our key to verify a signature from this zero commitment
 		let sig = keychain.sign(&msg, 0, &key_id, switch).unwrap();

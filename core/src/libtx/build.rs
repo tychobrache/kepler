@@ -68,7 +68,7 @@ where
 		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
 			let commit = build
 				.keychain
-				.commit(value, &key_id, &SwitchCommitmentType::Regular)
+				.commit(value, &key_id, &SwitchCommitmentType::Regular, asset.into())
 				.unwrap(); // TODO: proper support for different switch commitment schemes
 			let input = Input::new(features, commit, asset);
 			(
@@ -116,7 +116,10 @@ where
 			// TODO: proper support for different switch commitment schemes
 			let switch = &SwitchCommitmentType::Regular;
 
-			let commit = build.keychain.commit(value, &key_id, switch).unwrap();
+			let commit = build
+				.keychain
+				.commit(value, &key_id, switch, asset.into())
+				.unwrap();
 
 			debug!("Building output: {}, {:?}", value, commit);
 
@@ -128,6 +131,7 @@ where
 				switch,
 				commit,
 				None,
+				asset,
 			)
 			.unwrap();
 

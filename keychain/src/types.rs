@@ -29,6 +29,7 @@ use serde::{de, ser}; //TODO: Convert errors to use ErrorKind
 
 use crate::util;
 use crate::util::secp::constants::SECRET_KEY_SIZE;
+use crate::util::secp::ffi::Generator;
 use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::pedersen::Commitment;
 use crate::util::secp::{self, Message, Secp256k1, Signature};
@@ -489,6 +490,7 @@ pub trait Keychain: Sync + Send + Clone {
 		amount: u64,
 		id: &Identifier,
 		switch: &SwitchCommitmentType,
+		generator: Generator,
 	) -> Result<Commitment, Error>;
 	fn blind_sum(&self, blind_sum: &BlindSum) -> Result<BlindingFactor, Error>;
 	fn sign(
