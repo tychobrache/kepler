@@ -50,13 +50,14 @@ where
 	let rewind_nonce = b.rewind_nonce(secp, &commit)?;
 	let private_nonce = b.private_nonce(secp, &commit)?;
 	let message = b.proof_message(secp, key_id, switch)?;
-	Ok(secp.bullet_proof(
+	Ok(secp.bullet_proof_with_generator(
 		amount,
 		skey,
 		rewind_nonce,
 		private_nonce,
 		extra_data,
 		Some(message),
+		asset.into(),
 	))
 }
 
@@ -66,8 +67,9 @@ pub fn verify(
 	commit: Commitment,
 	proof: RangeProof,
 	extra_data: Option<Vec<u8>>,
+	asset: Asset,
 ) -> Result<(), secp::Error> {
-	let result = secp.verify_bullet_proof(commit, proof, extra_data);
+	let result = secp.verify_bullet_proof_with_generator(commit, proof, extra_data, asset.into());
 	match result {
 		Ok(_) => Ok(()),
 		Err(e) => Err(e),
@@ -397,7 +399,7 @@ impl ProofBuild for ViewKey {
 		commit: &Commitment,
 		amount: u64,
 		message: ProofMessage,
-		asset: Asset,
+		_asset: Asset,
 	) -> Result<Option<(Identifier, SwitchCommitmentType)>, Error> {
 		if message.len() != 20 {
 			return Ok(None);
@@ -473,7 +475,14 @@ mod tests {
 			asset,
 		)
 		.unwrap();
-		assert!(verify(&keychain.secp(), commit.clone(), proof.clone(), None).is_ok());
+		assert!(verify(
+			&keychain.secp(),
+			commit.clone(),
+			proof.clone(),
+			None,
+			asset.into()
+		)
+		.is_ok());
 		let rewind = rewind(keychain.secp(), &builder, commit, None, proof, asset).unwrap();
 		assert!(rewind.is_some());
 		let (r_amount, r_id, r_switch) = rewind.unwrap();
@@ -505,7 +514,14 @@ mod tests {
 				asset,
 			)
 			.unwrap();
-			assert!(verify(&keychain.secp(), commit.clone(), proof.clone(), None).is_ok());
+			assert!(verify(
+				&keychain.secp(),
+				commit.clone(),
+				proof.clone(),
+				None,
+				asset.into()
+			)
+			.is_ok());
 			let rewind = rewind(
 				keychain.secp(),
 				&builder,
@@ -537,7 +553,14 @@ mod tests {
 				asset,
 			)
 			.unwrap();
-			assert!(verify(&keychain.secp(), commit.clone(), proof.clone(), None).is_ok());
+			assert!(verify(
+				&keychain.secp(),
+				commit.clone(),
+				proof.clone(),
+				None,
+				asset.into()
+			)
+			.is_ok());
 			let rewind = rewind(
 				keychain.secp(),
 				&builder,

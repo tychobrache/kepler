@@ -1370,8 +1370,12 @@ impl Output {
 	/// Validates the range proof using the commitment
 	pub fn verify_proof(&self) -> Result<(), Error> {
 		let secp = static_secp_instance();
-		secp.lock()
-			.verify_bullet_proof(self.commit, self.proof, None)?;
+		secp.lock().verify_bullet_proof_with_generator(
+			self.commit,
+			self.proof,
+			None,
+			self.asset.into(),
+		)?;
 		Ok(())
 	}
 
