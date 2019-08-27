@@ -729,11 +729,14 @@ impl TransactionBody {
 		if !outputs.is_empty() {
 			let mut commits = vec![];
 			let mut proofs = vec![];
+			let mut asset = Asset::default();
 			for x in &outputs {
 				commits.push(x.commit);
 				proofs.push(x.proof);
+				asset = x.asset;
 			}
-			Output::batch_verify_proofs(&commits, &proofs)?;
+			// TODO different asset
+			Output::batch_verify_proofs(&commits, &proofs, &asset)?;
 		}
 
 		// Find all the kernels that have not yet been verified.
@@ -1383,10 +1386,15 @@ impl Output {
 	pub fn batch_verify_proofs(
 		commits: &Vec<Commitment>,
 		proofs: &Vec<RangeProof>,
+		asset: &Asset,
 	) -> Result<(), Error> {
 		let secp = static_secp_instance();
-		secp.lock()
-			.verify_bullet_proof_multi(commits.clone(), proofs.clone(), None)?;
+		secp.lock().verify_bullet_proof_multi_with_generator(
+			commits.clone(),
+			proofs.clone(),
+			None,
+			asset.into(),
+		)?;
 		Ok(())
 	}
 }

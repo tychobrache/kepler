@@ -91,7 +91,8 @@ where
 	let nonce = b
 		.rewind_nonce(secp, &commit)
 		.map_err(|e| ErrorKind::RangeProof(e.to_string()))?;
-	let info = secp.rewind_bullet_proof(commit, nonce, extra_data, proof);
+	let info =
+		secp.rewind_bullet_proof_with_generator(commit, nonce, extra_data, proof, asset.into());
 	if info.is_err() {
 		return Ok(None);
 	}

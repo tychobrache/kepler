@@ -1368,6 +1368,9 @@ impl<'a> Extension<'a> {
 			let output = self.output_pmmr.get_data(pos);
 			let proof = self.rproof_pmmr.get_data(pos);
 
+			// TODO different asset
+			let asset = Asset::default();
+
 			// Output and corresponding rangeproof *must* exist.
 			// It is invalid for either to be missing and we fail immediately in this case.
 			match (output, proof) {
@@ -1382,7 +1385,7 @@ impl<'a> Extension<'a> {
 			proof_count += 1;
 
 			if proofs.len() >= 1_000 {
-				Output::batch_verify_proofs(&commits, &proofs)?;
+				Output::batch_verify_proofs(&commits, &proofs, &asset)?;
 				commits.clear();
 				proofs.clear();
 				debug!(
@@ -1398,7 +1401,7 @@ impl<'a> Extension<'a> {
 
 		// remaining part which not full of 1000 range proofs
 		if proofs.len() > 0 {
-			Output::batch_verify_proofs(&commits, &proofs)?;
+			Output::batch_verify_proofs(&commits, &proofs, &asset)?;
 			commits.clear();
 			proofs.clear();
 			debug!(
