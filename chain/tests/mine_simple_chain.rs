@@ -448,6 +448,7 @@ fn spend_in_fork_and_compact() {
 			vec![
 				build::coinbase_input(consensus::reward(fork_head.height, 0), key_id2.clone()),
 				build::output(
+					Default::default(),
 					consensus::reward(fork_head.height, 0) - 20000,
 					key_id30.clone(),
 				),
@@ -468,10 +469,12 @@ fn spend_in_fork_and_compact() {
 		let tx2 = build::transaction(
 			vec![
 				build::input(
+					Default::default(),
 					consensus::reward(next.header.clone().height, 0) - 20000,
 					key_id30.clone(),
 				),
 				build::output(
+					Default::default(),
 					consensus::reward(next.header.clone().height, 0) - 40000,
 					key_id31.clone(),
 				),

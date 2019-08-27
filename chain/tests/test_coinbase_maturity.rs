@@ -104,7 +104,7 @@ fn test_coinbase_maturity() {
 		let coinbase_txn = build::transaction(
 			vec![
 				build::coinbase_input(amount, key_id1.clone()),
-				build::output(amount - 2, key_id2.clone()),
+				build::output(Default::default(), amount - 2, key_id2.clone()),
 				build::with_fee(2),
 			],
 			&keychain,
@@ -191,7 +191,7 @@ fn test_coinbase_maturity() {
 			let coinbase_txn = build::transaction(
 				vec![
 					build::coinbase_input(amount, key_id1.clone()),
-					build::output(amount - 2, key_id2.clone()),
+					build::output(Default::default(), amount - 2, key_id2.clone()),
 					build::with_fee(2),
 				],
 				&keychain,

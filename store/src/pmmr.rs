@@ -16,6 +16,9 @@
 use std::fs::{self, File};
 use std::{io, time};
 
+use crate::core::map_vec;
+use log::debug;
+
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::pmmr::{self, family, Backend};
 use crate::core::core::BlockHeader;

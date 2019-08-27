@@ -15,6 +15,7 @@
 //! Utility structs to handle the 3 MMRs (output, rangeproof,
 //! kernel) along the overall header MMR conveniently and transactionally.
 
+use crate::core::core::asset::Asset;
 use crate::core::core::committed::Committed;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::merkle_proof::MerkleProof;
@@ -1398,6 +1399,9 @@ impl<'a> Extension<'a> {
 				status.on_validation(0, 0, proof_count, total_rproofs);
 			}
 		}
+
+		// TODO
+		let asset = Asset::default();
 
 		// remaining part which not full of 1000 range proofs
 		if proofs.len() > 0 {

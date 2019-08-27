@@ -15,6 +15,8 @@
 use memmap;
 use tempfile::tempfile;
 
+use log::error;
+
 use crate::core::ser::{
 	self, BinWriter, FixedLength, Readable, Reader, StreamingReader, Writeable, Writer,
 };

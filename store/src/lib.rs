@@ -20,16 +20,8 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-#[macro_use]
-extern crate log;
-use failure;
-#[macro_use]
-extern crate failure_derive;
-#[macro_use]
-extern crate kepler_core as core;
-extern crate kepler_util as util;
-
-//use kepler_core as core;
+use kepler_core as core;
+use kepler_util as util;
 
 pub mod leaf_set;
 pub mod lmdb;

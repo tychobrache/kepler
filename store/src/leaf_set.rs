@@ -15,9 +15,9 @@
 //! Compact (roaring) bitmap representing the set of leaf positions
 //! that exist and are not currently pruned in the MMR.
 
-use std::path::{Path, PathBuf};
-
 use croaring::Bitmap;
+use log::debug;
+use std::path::{Path, PathBuf};
 
 use crate::core::core::hash::Hashed;
 use crate::core::core::pmmr;

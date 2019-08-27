@@ -18,6 +18,9 @@ use std::fs;
 use std::marker;
 use std::sync::Arc;
 
+use failure_derive::Fail;
+use log::{debug, info, trace};
+
 use lmdb_zero as lmdb;
 use lmdb_zero::traits::CreateCursor;
 use lmdb_zero::LmdbResultExt;

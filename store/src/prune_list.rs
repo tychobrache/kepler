@@ -24,6 +24,8 @@
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
+use log::debug;
+
 use croaring::Bitmap;
 
 use crate::core::core::pmmr::{bintree_postorder_height, family, path};
