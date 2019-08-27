@@ -14,6 +14,7 @@
 
 //! Message types that transit over the network and related serialization code.
 
+use log::error;
 use num::FromPrimitive;
 use std::fmt;
 use std::io::{Read, Write};
@@ -24,6 +25,7 @@ use crate::core::core::BlockHeader;
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, FixedLength, Readable, Reader, StreamingReader, Writeable, Writer};
 use crate::core::{consensus, global};
+use crate::core::{ser_multiread, ser_multiwrite};
 use crate::types::{
 	Capabilities, Error, PeerAddr, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,
 };

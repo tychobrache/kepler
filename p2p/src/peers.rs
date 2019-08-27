@@ -19,6 +19,7 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use log::{debug, error, trace};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 
@@ -26,6 +27,7 @@ use crate::chain;
 use crate::core::core;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::global;
+use crate::core::map_vec;
 use crate::core::pow::Difficulty;
 use crate::peer::Peer;
 use crate::store::{PeerData, PeerStore, State};

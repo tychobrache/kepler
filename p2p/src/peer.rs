@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::util::{Mutex, RwLock};
+use log::{debug, error, trace};
 use std::fmt;
 use std::fs::File;
 use std::io::Read;

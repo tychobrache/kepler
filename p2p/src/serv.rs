@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use log::{debug, trace};
 use std::fs::File;
 use std::io::{self, Read};
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};

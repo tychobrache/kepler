@@ -26,15 +26,12 @@ extern crate bitflags;
 #[macro_use]
 extern crate enum_primitive;
 
-#[macro_use]
-extern crate kepler_core as core;
 use kepler_chain as chain;
+use kepler_core as core;
 use kepler_util as util;
 
 #[macro_use]
 extern crate serde_derive;
-#[macro_use]
-extern crate log;
 
 mod conn;
 pub mod handshake;

@@ -20,6 +20,7 @@
 //! forces us to go through some additional gymnastic to loop over the async
 //! stream and make sure we get the right number of bytes out.
 
+use log::{debug, error, trace};
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream};

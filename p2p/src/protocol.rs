@@ -21,6 +21,7 @@ use crate::msg::{
 };
 use crate::types::{Error, NetAdapter, PeerInfo};
 use chrono::prelude::Utc;
+use log::{debug, error, trace, warn};
 use rand::{thread_rng, Rng};
 use std::cmp;
 use std::fs::{self, File, OpenOptions};

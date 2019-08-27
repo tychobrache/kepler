@@ -30,6 +30,7 @@ use crate::core::core::hash::Hash;
 use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
+use crate::core::{ser_multiwrite, try_iter_map_vec};
 use crate::msg::ProtocolVersion;
 use kepler_store;
 

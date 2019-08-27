@@ -15,11 +15,13 @@
 //! Storage implementation for peer data.
 
 use chrono::Utc;
+use log::debug;
 use num::FromPrimitive;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 
 use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
+use crate::core::{ser_multiread, ser_multiwrite};
 use crate::types::{Capabilities, PeerAddr, ReasonForBan};
 use kepler_store::{self, option_to_not_found, to_key, Error};
 

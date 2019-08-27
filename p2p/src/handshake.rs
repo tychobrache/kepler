@@ -18,6 +18,7 @@ use crate::msg::{read_message, write_message, Hand, ProtocolVersion, Shake, Type
 use crate::peer::Peer;
 use crate::types::{Capabilities, Direction, Error, P2PConfig, PeerAddr, PeerInfo, PeerLiveInfo};
 use crate::util::RwLock;
+use log::{debug, trace};
 use rand::{thread_rng, Rng};
 use std::collections::VecDeque;
 use std::net::{SocketAddr, TcpStream};
