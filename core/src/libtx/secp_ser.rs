@@ -14,6 +14,7 @@
 
 //! Sane serialization & deserialization of cryptographic structs into hex
 
+use crate::core::asset::Asset;
 use crate::keychain::BlindingFactor;
 use crate::serde::{Deserialize, Deserializer, Serializer};
 use crate::util::secp::pedersen::{Commitment, RangeProof};
@@ -93,7 +94,6 @@ pub mod option_sig_serde {
 			None => Ok(None),
 		})
 	}
-
 }
 
 /// Serializes a secp::Signature to and from hex
@@ -162,6 +162,18 @@ where
 	String::deserialize(deserializer)
 		.and_then(|string| from_hex(string).map_err(|err| Error::custom(err.to_string())))
 		.and_then(|bytes: Vec<u8>| Ok(Commitment::from_vec(bytes.to_vec())))
+}
+
+/// Creates a Asset from a hex string
+pub fn asset_from_hex<'de, D>(deserializer: D) -> Result<Asset, D::Error>
+where
+	D: Deserializer<'de>,
+{
+	use serde::de::{Error, IntoDeserializer};
+
+	let val = String::deserialize(deserializer)
+		.and_then(|string| from_hex(string).map_err(|err| Error::custom(err.to_string())))?;
+	Asset::deserialize(val.into_deserializer())
 }
 
 /// Seralizes a byte string into hex

@@ -1,6 +1,7 @@
 use serde::de::{Deserialize, Deserializer, SeqAccess, Visitor};
 use serde::ser::{Serialize, SerializeSeq, Serializer};
 use std::cmp::Ordering;
+use std::convert::AsRef;
 use std::fmt::{Debug, Formatter, Result as FmtResult};
 use std::hash::{Hash, Hasher};
 
@@ -139,6 +140,12 @@ impl Hash for Asset {
 		let mut hex = String::new();
 		hex.extend(self.0.iter().map(|byte| format!("{:02x?}", byte)));
 		hex.hash(state);
+	}
+}
+
+impl AsRef<[u8]> for Asset {
+	fn as_ref(&self) -> &[u8] {
+		&self.0
 	}
 }
 
