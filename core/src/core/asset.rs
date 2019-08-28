@@ -1,9 +1,11 @@
 use serde::de::{Deserialize, Deserializer, SeqAccess, Visitor};
 use serde::ser::{Serialize, SerializeSeq, Serializer};
+use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter, Result as FmtResult};
+use std::hash::{Hash, Hasher};
 
-use crate::ser::{self, Readable, Reader, Writeable, Writer};
-
+use crate::core::hash::DefaultHashable;
+use crate::ser::{self, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
 use crate::util::secp::constants::GENERATOR_H;
 use crate::util::secp::ffi::Generator;
 
@@ -111,3 +113,45 @@ impl Writeable for Asset {
 		Ok(())
 	}
 }
+
+impl Eq for Asset {}
+
+impl Ord for Asset {
+	fn cmp(&self, other: &Asset) -> Ordering {
+		self.0.cmp(&other.0)
+	}
+}
+
+impl PartialOrd for Asset {
+	fn partial_cmp(&self, other: &Asset) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl PartialEq for Asset {
+	fn eq(&self, other: &Asset) -> bool {
+		self.0[..] == other.0[..]
+	}
+}
+
+impl Hash for Asset {
+	fn hash<H: Hasher>(&self, state: &mut H) {
+		let mut hex = String::new();
+		hex.extend(self.0.iter().map(|byte| format!("{:02x?}", byte)));
+		hex.hash(state);
+	}
+}
+
+impl FixedLength for Asset {
+	const LEN: usize = 64;
+}
+
+impl PMMRable for Asset {
+	type E = Self;
+
+	fn as_elmt(&self) -> Self::E {
+		self.clone()
+	}
+}
+
+impl DefaultHashable for Asset {}

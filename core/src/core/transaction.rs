@@ -32,6 +32,7 @@ use crate::{consensus, global};
 use enum_primitive::FromPrimitive;
 use std::cmp::Ordering;
 use std::cmp::{max, min};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::{error, fmt};
 
@@ -727,16 +728,21 @@ impl TransactionBody {
 
 		// Now batch verify all those unverified rangeproofs
 		if !outputs.is_empty() {
-			let mut commits = vec![];
-			let mut proofs = vec![];
-			let mut asset = Asset::default();
+			let mut all_commits: HashMap<Asset, (Vec<Commitment>, Vec<RangeProof>)> =
+				HashMap::new();
 			for x in &outputs {
-				commits.push(x.commit);
-				proofs.push(x.proof);
-				asset = x.asset;
+				all_commits
+					.entry(x.asset)
+					.and_modify(|cr| {
+						cr.0.push(x.commit);
+						cr.1.push(x.proof);
+					})
+					.or_insert((vec![x.commit], vec![x.proof]));
 			}
-			// TODO different asset
-			Output::batch_verify_proofs(&commits, &proofs, &asset)?;
+
+			for (asset, (commits, proofs)) in all_commits.iter() {
+				Output::batch_verify_proofs(&commits, &proofs, &asset)?;
+			}
 		}
 
 		// Find all the kernels that have not yet been verified.

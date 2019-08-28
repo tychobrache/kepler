@@ -34,6 +34,7 @@ use crate::util::{file, secp_static, zip};
 use croaring::Bitmap;
 use kepler_store;
 use kepler_store::pmmr::{clean_files_by_prefix, PMMRBackend, PMMR_FILES};
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
@@ -48,6 +49,7 @@ const SYNC_HEAD_SUBDIR: &'static str = "sync_head";
 
 const OUTPUT_SUBDIR: &'static str = "output";
 const RANGE_PROOF_SUBDIR: &'static str = "rangeproof";
+const ASSET_SUBDIR: &'static str = "asset";
 const KERNEL_SUBDIR: &'static str = "kernel";
 
 const TXHASHSET_ZIP: &'static str = "txhashset_snapshot";
@@ -104,6 +106,7 @@ pub struct TxHashSet {
 
 	output_pmmr_h: PMMRHandle<Output>,
 	rproof_pmmr_h: PMMRHandle<RangeProof>,
+	asset_pmmr_h: PMMRHandle<Asset>,
 	kernel_pmmr_h: PMMRHandle<TxKernel>,
 
 	// chain store used as index of commitments to MMR positions
@@ -146,6 +149,14 @@ impl TxHashSet {
 				&root_dir,
 				TXHASHSET_SUBDIR,
 				RANGE_PROOF_SUBDIR,
+				true,
+				true,
+				header,
+			)?,
+			asset_pmmr_h: PMMRHandle::new(
+				&root_dir,
+				TXHASHSET_SUBDIR,
+				ASSET_SUBDIR,
 				true,
 				true,
 				header,
@@ -783,6 +794,7 @@ pub struct Extension<'a> {
 	header_pmmr: PMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
 	output_pmmr: PMMR<'a, Output, PMMRBackend<Output>>,
 	rproof_pmmr: PMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
+	asset_pmmr: PMMR<'a, Asset, PMMRBackend<Asset>>,
 	kernel_pmmr: PMMR<'a, TxKernel, PMMRBackend<TxKernel>>,
 
 	/// Rollback flag.
@@ -838,6 +850,7 @@ impl<'a> Extension<'a> {
 				&mut trees.rproof_pmmr_h.backend,
 				trees.rproof_pmmr_h.last_pos,
 			),
+			asset_pmmr: PMMR::at(&mut trees.asset_pmmr_h.backend, trees.asset_pmmr_h.last_pos),
 			kernel_pmmr: PMMR::at(
 				&mut trees.kernel_pmmr_h.backend,
 				trees.kernel_pmmr_h.last_pos,
@@ -1358,68 +1371,57 @@ impl<'a> Extension<'a> {
 	}
 
 	fn verify_rangeproofs(&self, status: &dyn TxHashsetWriteStatus) -> Result<(), Error> {
-		let now = Instant::now();
+		let mut all_commits: HashMap<Asset, (Vec<Commitment>, Vec<RangeProof>)> = HashMap::new();
 
-		let mut commits: Vec<Commitment> = vec![];
-		let mut proofs: Vec<RangeProof> = vec![];
-
-		let mut proof_count = 0;
-		let total_rproofs = pmmr::n_leaves(self.output_pmmr.unpruned_size());
 		for pos in self.output_pmmr.leaf_pos_iter() {
 			let output = self.output_pmmr.get_data(pos);
 			let proof = self.rproof_pmmr.get_data(pos);
-
-			// TODO different asset
-			let asset = Asset::default();
+			let asset = self.asset_pmmr.get_data(pos);
 
 			// Output and corresponding rangeproof *must* exist.
 			// It is invalid for either to be missing and we fail immediately in this case.
-			match (output, proof) {
-				(None, _) => return Err(ErrorKind::OutputNotFound.into()),
-				(_, None) => return Err(ErrorKind::RangeproofNotFound.into()),
-				(Some(output), Some(proof)) => {
-					commits.push(output.commit);
-					proofs.push(proof);
+			match (output, proof, asset) {
+				(None, _, _) => return Err(ErrorKind::OutputNotFound.into()),
+				(_, None, _) => return Err(ErrorKind::RangeproofNotFound.into()),
+				(_, _, None) => return Err(ErrorKind::OutputNotFound.into()),
+				(Some(output), Some(proof), Some(asset)) => {
+					all_commits
+						.entry(asset)
+						.and_modify(|cr| {
+							cr.0.push(output.commit);
+							cr.1.push(proof);
+						})
+						.or_insert((vec![output.commit], vec![proof]));
 				}
 			}
+		}
 
-			proof_count += 1;
+		for (asset, (commits, proofs)) in all_commits.iter() {
+			let proof_count = proofs.len();
+
+			let total_rproofs = pmmr::n_leaves(self.output_pmmr.unpruned_size());
 
 			if proofs.len() >= 1_000 {
 				Output::batch_verify_proofs(&commits, &proofs, &asset)?;
-				commits.clear();
-				proofs.clear();
 				debug!(
 					"txhashset: verify_rangeproofs: verified {} rangeproofs",
 					proof_count,
 				);
-			}
 
-			if proof_count % 20 == 0 {
-				status.on_validation(0, 0, proof_count, total_rproofs);
+				if proof_count % 20 == 0 {
+					status.on_validation(0, 0, proof_count as u64, total_rproofs);
+				}
+			} else {
+				if proofs.len() > 0 {
+					Output::batch_verify_proofs(&commits, &proofs, &asset)?;
+					debug!(
+						"txhashset: verify_rangeproofs: verified {} rangeproofs",
+						proof_count,
+					);
+				}
 			}
 		}
 
-		// TODO
-		let asset = Asset::default();
-
-		// remaining part which not full of 1000 range proofs
-		if proofs.len() > 0 {
-			Output::batch_verify_proofs(&commits, &proofs, &asset)?;
-			commits.clear();
-			proofs.clear();
-			debug!(
-				"txhashset: verify_rangeproofs: verified {} rangeproofs",
-				proof_count,
-			);
-		}
-
-		debug!(
-			"txhashset: verified {} rangeproofs, pmmr size {}, took {}s",
-			proof_count,
-			self.rproof_pmmr.unpruned_size(),
-			now.elapsed().as_secs(),
-		);
 		Ok(())
 	}
 }
