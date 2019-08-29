@@ -52,6 +52,16 @@ impl Debug for Asset {
 	}
 }
 
+impl From<&str> for Asset {
+	fn from(string: &str) -> Asset {
+		Asset(
+			crate::util::secp::Secp256k1::new()
+				.generate_generator_with_hash(string)
+				.0,
+		)
+	}
+}
+
 impl Serialize for Asset {
 	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
 	where

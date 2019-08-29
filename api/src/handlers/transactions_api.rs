@@ -111,6 +111,7 @@ impl TxHashSetHandler {
 			block_height: None,
 			merkle_proof: Some(merkle_proof),
 			mmr_index: output_pos,
+			asset: Default::default(), // TODO asset
 		})
 	}
 }

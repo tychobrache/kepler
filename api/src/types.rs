@@ -15,6 +15,7 @@
 use std::sync::Arc;
 
 use crate::chain;
+use crate::core::core::asset::Asset;
 use crate::core::core::hash::Hashed;
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::{core, ser};
@@ -258,6 +259,7 @@ pub struct OutputPrintable {
 	pub merkle_proof: Option<MerkleProof>,
 	/// MMR Position
 	pub mmr_index: u64,
+	pub asset: Asset,
 }
 
 impl OutputPrintable {
@@ -309,6 +311,7 @@ impl OutputPrintable {
 			block_height,
 			merkle_proof,
 			mmr_index: output_pos,
+			asset: output.asset,
 		})
 	}
 
@@ -372,6 +375,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 			BlockHeight,
 			MerkleProof,
 			MmrIndex,
+			Asset,
 		}
 
 		struct OutputPrintableVisitor;
@@ -395,6 +399,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 				let mut block_height = None;
 				let mut merkle_proof = None;
 				let mut mmr_index = None;
+				let mut asset = None;
 
 				while let Some(key) = map.next_key()? {
 					match key {
@@ -440,6 +445,10 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 							no_dup!(mmr_index);
 							mmr_index = Some(map.next_value()?)
 						}
+						Field::Asset => {
+							no_dup!(asset);
+							asset = Some(map.next_value()?)
+						}
 					}
 				}
 
@@ -460,6 +469,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 					block_height: block_height,
 					merkle_proof: merkle_proof,
 					mmr_index: mmr_index.unwrap(),
+					asset: asset.unwrap(),
 				})
 			}
 		}
@@ -471,6 +481,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 			"proof",
 			"proof_hash",
 			"mmr_index",
+			"asset",
 		];
 		deserializer.deserialize_struct("OutputPrintable", FIELDS, OutputPrintableVisitor)
 	}
