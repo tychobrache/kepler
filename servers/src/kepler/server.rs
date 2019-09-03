@@ -377,7 +377,7 @@ impl Server {
 			burn_reward: false,
 			enable_stratum_server: None,
 			stratum_server_addr: None,
-			wallet_listener_url: config_wallet_url,
+			wallet_listener_url: config_wallet_url.clone(),
 			minimum_share_difficulty: 1,
 		};
 
@@ -398,7 +398,7 @@ impl Server {
 				while sync_state.is_syncing() {
 					thread::sleep(secs_5);
 				}
-				miner.run_loop(wallet_listener_url);
+				miner.run_loop(Some(config_wallet_url));
 			});
 	}
 

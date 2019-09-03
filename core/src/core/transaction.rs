@@ -1416,16 +1416,18 @@ pub struct OutputIdentifier {
 	pub features: OutputFeatures,
 	/// Output commitment
 	pub commit: Commitment,
+	pub asset: Asset,
 }
 
 impl DefaultHashable for OutputIdentifier {}
 
 impl OutputIdentifier {
 	/// Build a new output_identifier.
-	pub fn new(features: OutputFeatures, commit: &Commitment) -> OutputIdentifier {
+	pub fn new(features: OutputFeatures, commit: &Commitment, asset: Asset) -> OutputIdentifier {
 		OutputIdentifier {
 			features,
 			commit: *commit,
+			asset: asset,
 		}
 	}
 
@@ -1439,16 +1441,17 @@ impl OutputIdentifier {
 		OutputIdentifier {
 			features: output.features,
 			commit: output.commit,
+			asset: output.asset,
 		}
 	}
 
 	/// Converts this identifier to a full output, provided a RangeProof
-	pub fn into_output(self, proof: RangeProof, asset: Asset) -> Output {
+	pub fn into_output(self, proof: RangeProof) -> Output {
 		Output {
 			proof,
 			features: self.features,
 			commit: self.commit,
-			asset: asset,
+			asset: self.asset,
 		}
 	}
 
@@ -1457,15 +1460,17 @@ impl OutputIdentifier {
 		OutputIdentifier {
 			features: input.features,
 			commit: input.commit,
+			asset: input.asset,
 		}
 	}
 
 	/// convert an output_identifier to hex string format.
 	pub fn to_hex(&self) -> String {
 		format!(
-			"{:b}{}",
+			"{:b}{}{}",
 			self.features as u8,
 			util::to_hex(self.commit.0.to_vec()),
+			util::to_hex(self.asset.to_bytes().to_vec())
 		)
 	}
 }
@@ -1478,6 +1483,7 @@ impl Writeable for OutputIdentifier {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.features.write(writer)?;
 		self.commit.write(writer)?;
+		self.asset.write(writer)?;
 		Ok(())
 	}
 }
@@ -1487,6 +1493,7 @@ impl Readable for OutputIdentifier {
 		Ok(OutputIdentifier {
 			features: OutputFeatures::read(reader)?,
 			commit: Commitment::read(reader)?,
+			asset: Asset::read(reader)?,
 		})
 	}
 }
@@ -1496,6 +1503,7 @@ impl From<Output> for OutputIdentifier {
 		OutputIdentifier {
 			features: out.features,
 			commit: out.commit,
+			asset: out.asset,
 		}
 	}
 }

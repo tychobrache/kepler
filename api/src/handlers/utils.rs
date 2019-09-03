@@ -45,8 +45,8 @@ pub fn get_output(
 	// For now we can just try both (but this probably needs to be part of the api
 	// params)
 	let outputs = [
-		OutputIdentifier::new(OutputFeatures::Plain, &commit),
-		OutputIdentifier::new(OutputFeatures::Coinbase, &commit),
+		OutputIdentifier::new(OutputFeatures::Plain, &commit, Default::default()),
+		OutputIdentifier::new(OutputFeatures::Coinbase, &commit, Default::default()),
 	];
 
 	let chain = w(chain)?;

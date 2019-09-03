@@ -23,6 +23,10 @@ impl Asset {
 	pub fn from_bytes(bytes: [u8; 64]) -> Self {
 		Asset(bytes)
 	}
+
+	pub fn to_bytes(&self) -> &[u8] {
+		&self.0
+	}
 }
 
 impl Default for Asset {

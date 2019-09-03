@@ -354,6 +354,7 @@ impl serde::ser::Serialize for OutputPrintable {
 		let hex_merkle_proof = &self.merkle_proof.clone().map(|x| x.to_hex());
 		state.serialize_field("merkle_proof", &hex_merkle_proof)?;
 		state.serialize_field("mmr_index", &self.mmr_index)?;
+		state.serialize_field("asset", &self.asset)?;
 
 		state.end()
 	}

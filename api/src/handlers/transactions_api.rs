@@ -22,6 +22,7 @@ use crate::util::secp::pedersen::Commitment;
 use crate::web::*;
 use failure::ResultExt;
 use hyper::{Body, Request, StatusCode};
+use log::debug;
 use std::sync::Weak;
 
 // Sum tree handler. Retrieve the roots:
@@ -87,6 +88,7 @@ impl TxHashSetHandler {
 				.collect::<Result<Vec<_>, _>>()
 				.context(ErrorKind::Internal("cain error".to_owned()))?,
 		};
+		debug!(" ------------ out put listing ok");
 		Ok(out)
 	}
 

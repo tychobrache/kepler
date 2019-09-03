@@ -533,6 +533,7 @@ impl Handler {
 			//    There is a new block on the chain
 			// or We are rebuilding the current one to include new transactions
 			// and there is at least one worker connected
+
 			if (current_hash != latest_hash || Utc::now().timestamp() >= deadline)
 				&& self.workers.count() > 0
 			{
@@ -540,6 +541,7 @@ impl Handler {
 					debug!("resend updated block");
 					let mut state = self.current_state.write();
 					let mut wallet_listener_url: Option<String> = None;
+
 					if !config.burn_reward {
 						wallet_listener_url = Some(config.wallet_listener_url.clone());
 					}

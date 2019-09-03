@@ -243,6 +243,7 @@ fn get_coinbase(
 	wallet_listener_url: Option<String>,
 	block_fees: BlockFees,
 ) -> Result<(core::Output, core::TxKernel, BlockFees), Error> {
+	debug!("---- get coinbase wallet: {:?}", wallet_listener_url);
 	match wallet_listener_url {
 		None => {
 			// Burn it
@@ -267,6 +268,7 @@ fn get_coinbase(
 /// Call the wallet API to create a coinbase output for the given block_fees.
 /// Will retry based on default "retry forever with backoff" behavior.
 fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
+	debug!("---- create coinbase rpc-------");
 	let url = format!("{}/v2/foreign", dest);
 	let req_body = json!({
 		"jsonrpc": "2.0",
@@ -284,9 +286,11 @@ fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Error> 
 			"Failed to get coinbase from {}. Is the wallet listening? {}",
 			dest, e
 		);
+		debug!("---- error coinbase rpc-------");
 		error!("{}", report);
 		Error::WalletComm(report)
 	})?;
+	debug!("---- success coinbase rpc-------");
 
 	let res: Value = serde_json::from_str(&res).unwrap();
 	trace!("Response: {}", res);

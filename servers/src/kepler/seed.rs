@@ -34,9 +34,9 @@ use crate::util::StopState;
 
 // DNS Seeds with contact email associated
 const MAINNET_DNS_SEEDS: &'static [&'static str] = &[
-	"seed1.kepler.network",
-	"seed2.kepler.network",
-	"seed3.kepler.network",
+	//"seed1.kepler.network",
+	//"seed2.kepler.network",
+	//"seed3.kepler.network",
 ];
 const FLOONET_DNS_SEEDS: &'static [&'static str] = &["testseed1.kepler.network"];
 

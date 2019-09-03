@@ -52,7 +52,7 @@ pub const WEEK_HEIGHT: u64 = 7 * DAY_HEIGHT;
 pub const YEAR_HEIGHT: u64 = 52 * WEEK_HEIGHT;
 
 /// Number of blocks before a coinbase matures and can be spent
-pub const COINBASE_MATURITY: u64 = DAY_HEIGHT;
+pub const COINBASE_MATURITY: u64 = 3; // TODO DEBUG
 
 /// The halving interval, every two years
 pub const HALVING_INTERVAL: u64 = 2 * YEAR_HEIGHT;

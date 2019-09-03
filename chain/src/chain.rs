@@ -1141,7 +1141,7 @@ impl Chain {
 				commit: x.commit,
 				features: x.features,
 				proof: y,
-				asset: Asset::default(), // TODO use asset as params to query
+				asset: x.asset,
 			});
 		}
 		Ok((outputs.0, max_index, output_vec))
