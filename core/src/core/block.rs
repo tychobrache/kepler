@@ -121,7 +121,7 @@ pub struct HeaderEntry {
 }
 
 impl Readable for HeaderEntry {
-	fn read(reader: &mut Reader) -> Result<HeaderEntry, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<HeaderEntry, ser::Error> {
 		let hash = Hash::read(reader)?;
 		let timestamp = reader.read_u64()?;
 		let total_difficulty = Difficulty::read(reader)?;
@@ -256,6 +256,7 @@ impl Default for BlockHeader {
 			output_root: ZERO_HASH,
 			range_proof_root: ZERO_HASH,
 			kernel_root: ZERO_HASH,
+			asset_root: ZERO_HASH,
 			total_kernel_offset: BlindingFactor::zero(),
 			output_mmr_size: 0,
 			kernel_mmr_size: 0,
@@ -299,6 +300,7 @@ impl Readable for BlockHeader {
 		let output_root = Hash::read(reader)?;
 		let range_proof_root = Hash::read(reader)?;
 		let kernel_root = Hash::read(reader)?;
+		let asset_root = Hash::read(reader)?;
 		let total_kernel_offset = BlindingFactor::read(reader)?;
 		let (output_mmr_size, kernel_mmr_size) = ser_multiread!(reader, read_u64, read_u64);
 		let pow = ProofOfWork::read(reader)?;
@@ -326,6 +328,7 @@ impl Readable for BlockHeader {
 			output_root,
 			range_proof_root,
 			kernel_root,
+			asset_root,
 			total_kernel_offset,
 			output_mmr_size,
 			kernel_mmr_size,
@@ -347,6 +350,7 @@ impl BlockHeader {
 			[write_fixed_bytes, &self.output_root],
 			[write_fixed_bytes, &self.range_proof_root],
 			[write_fixed_bytes, &self.kernel_root],
+			[write_fixed_bytes, &self.asset_root],
 			[write_fixed_bytes, &self.total_kernel_offset],
 			[write_u64, self.output_mmr_size],
 			[write_u64, self.kernel_mmr_size]

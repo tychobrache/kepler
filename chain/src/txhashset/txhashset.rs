@@ -51,6 +51,7 @@ const SYNC_HEAD_SUBDIR: &'static str = "sync_head";
 const OUTPUT_SUBDIR: &'static str = "output";
 const RANGE_PROOF_SUBDIR: &'static str = "rangeproof";
 const ASSET_SUBDIR: &'static str = "asset";
+const ISSUE_SUBDIR: &'static str = "issue";
 const KERNEL_SUBDIR: &'static str = "kernel";
 
 const TXHASHSET_ZIP: &'static str = "txhashset_snapshot";
@@ -159,6 +160,14 @@ impl TxHashSet {
 				&root_dir,
 				TXHASHSET_SUBDIR,
 				ASSET_SUBDIR,
+				true,
+				true,
+				header,
+			)?,
+			issue_pmmr_h: PMMRHandle::new(
+				&root_dir,
+				TXHASHSET_SUBDIR,
+				ISSUE_SUBDIR,
 				true,
 				true,
 				header,
@@ -797,6 +806,7 @@ pub struct Extension<'a> {
 	output_pmmr: PMMR<'a, Output, PMMRBackend<Output>>,
 	rproof_pmmr: PMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
 	asset_pmmr: PMMR<'a, Asset, PMMRBackend<Asset>>,
+	issue_pmmr: PMMR<'a, IssuedAsset, PMMRBackend<IssuedAsset>>,
 	kernel_pmmr: PMMR<'a, TxKernel, PMMRBackend<TxKernel>>,
 
 	/// Rollback flag.
@@ -853,6 +863,7 @@ impl<'a> Extension<'a> {
 				trees.rproof_pmmr_h.last_pos,
 			),
 			asset_pmmr: PMMR::at(&mut trees.asset_pmmr_h.backend, trees.asset_pmmr_h.last_pos),
+			issue_pmmr: PMMR::at(&mut trees.issue_pmmr_h.backend, trees.issue_pmmr_h.last_pos),
 			kernel_pmmr: PMMR::at(
 				&mut trees.kernel_pmmr_h.backend,
 				trees.kernel_pmmr_h.last_pos,
