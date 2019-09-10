@@ -230,6 +230,8 @@ pub struct BlockHeader {
 	pub range_proof_root: Hash,
 	/// Merklish root of all transaction kernels in the TxHashSet
 	pub kernel_root: Hash,
+	/// Merklish root of all assets in the TxHashSet
+	pub asset_root: Hash,
 	/// Total accumulated sum of kernel offsets since genesis block.
 	/// We can derive the kernel offset sum for *this* block from
 	/// the total kernel offset of the previous block header.

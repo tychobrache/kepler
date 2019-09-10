@@ -21,9 +21,9 @@ pub mod committed;
 pub mod compact_block;
 pub mod hash;
 pub mod id;
+pub mod issued_asset;
 pub mod merkle_proof;
 pub mod pmmr;
-pub mod standard_asset;
 pub mod transaction;
 pub mod verifier_cache;
 

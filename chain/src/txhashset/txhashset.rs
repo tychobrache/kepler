@@ -18,6 +18,7 @@
 use crate::core::core::asset::Asset;
 use crate::core::core::committed::Committed;
 use crate::core::core::hash::{Hash, Hashed};
+use crate::core::core::issued_asset::IssuedAsset;
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::pmmr::{self, Backend, ReadonlyPMMR, RewindablePMMR, PMMR};
 use crate::core::core::{
@@ -107,6 +108,7 @@ pub struct TxHashSet {
 	output_pmmr_h: PMMRHandle<Output>,
 	rproof_pmmr_h: PMMRHandle<RangeProof>,
 	asset_pmmr_h: PMMRHandle<Asset>,
+	issue_pmmr_h: PMMRHandle<IssuedAsset>,
 	kernel_pmmr_h: PMMRHandle<TxKernel>,
 
 	// chain store used as index of commitments to MMR positions
