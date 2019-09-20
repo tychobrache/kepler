@@ -28,6 +28,7 @@
 use kepler_keychain::SwitchCommitmentType;
 
 use crate::core::asset::Asset;
+use crate::core::issued_asset::AssetAction;
 use crate::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
 use crate::keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
 use crate::libtx::proof::{self, ProofBuild};
@@ -145,6 +146,18 @@ where
 				kern,
 				sum.add_key_id(key_id.to_value_path(value)),
 			)
+		},
+	)
+}
+
+pub fn asset<K, B>(asset_action: AssetAction) -> Box<Append<K, B>>
+where
+	K: Keychain,
+	B: ProofBuild,
+{
+	Box::new(
+		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
+			(tx.with_asset(asset_action), kern, sum)
 		},
 	)
 }
@@ -329,6 +342,7 @@ mod test {
 				input(Asset::default(), 10, key_id1),
 				input(Asset::default(), 12, key_id2),
 				output(Asset::default(), 20, key_id3),
+				asset(AssetAction::None),
 				with_fee(2),
 			],
 			&keychain,

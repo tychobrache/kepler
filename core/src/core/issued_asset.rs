@@ -9,7 +9,7 @@ use crate::util::secp::{key::PublicKey, ContextFlag, Message, Secp256k1, Signatu
 
 use super::asset::Asset;
 
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Copy, Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub enum AssetAction {
 	New(IssuedAsset, Signature),
 	Issue(u128, PublicKey, Signature),
@@ -18,7 +18,7 @@ pub enum AssetAction {
 	None,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
 pub struct IssuedAsset {
 	supply: u128,
 	owner: PublicKey,

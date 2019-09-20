@@ -585,6 +585,14 @@ impl TransactionBody {
 		self
 	}
 
+	pub fn with_asset(mut self, asset: AssetAction) -> TransactionBody {
+		if !self.assets.contains(&asset) {
+			self.assets.push(asset);
+		}
+
+		self
+	}
+
 	/// Total fee for a TransactionBody is the sum of fees of all kernels.
 	fn fee(&self) -> u64 {
 		self.kernels
@@ -944,6 +952,13 @@ impl Transaction {
 		}
 	}
 
+	pub fn with_asset(self, asset: AssetAction) -> Transaction {
+		Transaction {
+			body: self.body.with_asset(asset),
+			..self
+		}
+	}
+
 	/// Get inputs
 	pub fn inputs(&self) -> &Vec<Input> {
 		&self.body.inputs
@@ -967,6 +982,10 @@ impl Transaction {
 	/// Get kernels
 	pub fn kernels(&self) -> &Vec<TxKernel> {
 		&self.body.kernels
+	}
+
+	pub fn assets(&self) -> &Vec<AssetAction> {
+		&self.body.assets
 	}
 
 	/// Get kernels mut
