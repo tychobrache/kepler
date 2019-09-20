@@ -36,6 +36,8 @@ use crate::pow::{Difficulty, Proof, ProofOfWork};
 use crate::ser::{self, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
 use crate::util::{secp, static_secp_instance};
 
+use super::issued_asset::AssetAction;
+
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, Eq, PartialEq, Fail)]
 pub enum Error {
@@ -519,6 +521,7 @@ impl Block {
 		let mut all_inputs = HashSet::new();
 		let mut all_outputs = HashSet::new();
 		let mut all_kernels = HashSet::new();
+		let mut all_assets = HashSet::new();
 
 		// collect all the inputs, outputs and kernels from the txs
 		for tx in txs {
@@ -526,6 +529,7 @@ impl Block {
 			all_inputs.extend(tb.inputs);
 			all_outputs.extend(tb.outputs);
 			all_kernels.extend(tb.kernels);
+			all_assets.extend(tb.assets);
 		}
 
 		// include the coinbase output(s) and kernel(s) from the compact_block
@@ -539,9 +543,10 @@ impl Block {
 		let all_inputs = Vec::from_iter(all_inputs);
 		let all_outputs = Vec::from_iter(all_outputs);
 		let all_kernels = Vec::from_iter(all_kernels);
+		let all_assets = Vec::from_iter(all_assets);
 
 		// Initialize a tx body and sort everything.
-		let body = TransactionBody::init(all_inputs, all_outputs, all_kernels, false)?;
+		let body = TransactionBody::init(all_inputs, all_outputs, all_kernels, all_assets, false)?;
 
 		// Finally return the full block.
 		// Note: we have not actually validated the block here,
@@ -624,6 +629,10 @@ impl Block {
 		&self.body.inputs
 	}
 
+	pub fn assets(&self) -> &Vec<AssetAction> {
+		&self.body.assets
+	}
+
 	/// Get inputs mutable
 	pub fn inputs_mut(&mut self) -> &mut Vec<Input> {
 		&mut self.body.inputs
@@ -664,12 +673,13 @@ impl Block {
 	pub fn cut_through(self) -> Result<Block, Error> {
 		let mut inputs = self.inputs().clone();
 		let mut outputs = self.outputs().clone();
+		let assets = self.assets().clone();
 		transaction::cut_through(&mut inputs, &mut outputs)?;
 
 		let kernels = self.kernels().clone();
 
 		// Initialize tx body and sort everything.
-		let body = TransactionBody::init(inputs, outputs, kernels, false)?;
+		let body = TransactionBody::init(inputs, outputs, kernels, assets, false)?;
 
 		Ok(Block {
 			header: self.header,

@@ -37,6 +37,7 @@ use std::sync::Arc;
 use std::{error, fmt};
 
 use crate::core::asset::Asset;
+use crate::core::issued_asset::AssetAction;
 
 // Enum of various supported kernel "features".
 enum_from_primitive! {
@@ -406,6 +407,8 @@ pub struct TransactionBody {
 	pub outputs: Vec<Output>,
 	/// List of kernels that make up this transaction (usually a single kernel).
 	pub kernels: Vec<TxKernel>,
+	/// List of issued asset action
+	pub assets: Vec<AssetAction>,
 }
 
 /// PartialEq
@@ -419,16 +422,25 @@ impl PartialEq for TransactionBody {
 /// write the body as binary.
 impl Writeable for TransactionBody {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		let assets_vec = bincode::serialize(&self.assets).map_err(|_| {
+			ser::Error::IOErr(
+				"asset action deserialize error".to_owned(),
+				std::io::ErrorKind::InvalidInput,
+			)
+		})?;
+
 		ser_multiwrite!(
 			writer,
 			[write_u64, self.inputs.len() as u64],
 			[write_u64, self.outputs.len() as u64],
-			[write_u64, self.kernels.len() as u64]
+			[write_u64, self.kernels.len() as u64],
+			[write_u64, assets_vec.len() as u64]
 		);
 
 		self.inputs.write(writer)?;
 		self.outputs.write(writer)?;
 		self.kernels.write(writer)?;
+		writer.write_fixed_bytes(&assets_vec)?;
 
 		Ok(())
 	}
@@ -438,8 +450,8 @@ impl Writeable for TransactionBody {
 /// body from a binary stream.
 impl Readable for TransactionBody {
 	fn read(reader: &mut dyn Reader) -> Result<TransactionBody, ser::Error> {
-		let (input_len, output_len, kernel_len) =
-			ser_multiread!(reader, read_u64, read_u64, read_u64);
+		let (input_len, output_len, kernel_len, assets_len) =
+			ser_multiread!(reader, read_u64, read_u64, read_u64, read_u64);
 
 		// Quick block weight check before proceeding.
 		// Note: We use weight_as_block here (inputs have weight).
@@ -447,6 +459,7 @@ impl Readable for TransactionBody {
 			input_len as usize,
 			output_len as usize,
 			kernel_len as usize,
+			assets_len as usize,
 		);
 
 		if tx_block_weight > global::max_block_weight() {
@@ -457,8 +470,16 @@ impl Readable for TransactionBody {
 		let outputs = read_multi(reader, output_len)?;
 		let kernels = read_multi(reader, kernel_len)?;
 
+		let assets_vec = reader.read_fixed_bytes(assets_len as usize)?;
+		let assets = bincode::deserialize::<Vec<AssetAction>>(&assets_vec[..]).map_err(|_| {
+			ser::Error::IOErr(
+				"asset action deserialize error".to_owned(),
+				std::io::ErrorKind::InvalidInput,
+			)
+		})?;
+
 		// Initialize tx body and verify everything is sorted.
-		let body = TransactionBody::init(inputs, outputs, kernels, true)
+		let body = TransactionBody::init(inputs, outputs, kernels, assets, true)
 			.map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(body)
@@ -492,6 +513,7 @@ impl TransactionBody {
 			inputs: vec![],
 			outputs: vec![],
 			kernels: vec![],
+			assets: vec![],
 		}
 	}
 
@@ -509,12 +531,14 @@ impl TransactionBody {
 		inputs: Vec<Input>,
 		outputs: Vec<Output>,
 		kernels: Vec<TxKernel>,
+		assets: Vec<AssetAction>,
 		verify_sorted: bool,
 	) -> Result<TransactionBody, Error> {
 		let mut body = TransactionBody {
 			inputs,
 			outputs,
 			kernels,
+			assets,
 		};
 
 		if verify_sorted {
@@ -579,7 +603,14 @@ impl TransactionBody {
 
 	/// Calculate weight of transaction using block weighing
 	pub fn body_weight_as_block(&self) -> usize {
-		TransactionBody::weight_as_block(self.inputs.len(), self.outputs.len(), self.kernels.len())
+		let assets_vec = bincode::serialize(&self.assets).unwrap();
+
+		TransactionBody::weight_as_block(
+			self.inputs.len(),
+			self.outputs.len(),
+			self.kernels.len(),
+			assets_vec.len(),
+		)
 	}
 
 	/// Calculate transaction weight from transaction details. This is non
@@ -595,11 +626,17 @@ impl TransactionBody {
 
 	/// Calculate transaction weight using block weighing from transaction
 	/// details. Consensus critical and uses consensus weight values.
-	pub fn weight_as_block(input_len: usize, output_len: usize, kernel_len: usize) -> usize {
+	pub fn weight_as_block(
+		input_len: usize,
+		output_len: usize,
+		kernel_len: usize,
+		assets_len: usize,
+	) -> usize {
 		input_len
 			.saturating_mul(consensus::BLOCK_INPUT_WEIGHT)
 			.saturating_add(output_len.saturating_mul(consensus::BLOCK_OUTPUT_WEIGHT))
 			.saturating_add(kernel_len.saturating_mul(consensus::BLOCK_KERNEL_WEIGHT))
+			.saturating_add(assets_len)
 	}
 
 	/// Lock height of a body is the max lock height of the kernels.
@@ -856,12 +893,17 @@ impl Transaction {
 
 	/// Creates a new transaction initialized with
 	/// the provided inputs, outputs, kernels
-	pub fn new(inputs: Vec<Input>, outputs: Vec<Output>, kernels: Vec<TxKernel>) -> Transaction {
+	pub fn new(
+		inputs: Vec<Input>,
+		outputs: Vec<Output>,
+		kernels: Vec<TxKernel>,
+		assets: Vec<AssetAction>,
+	) -> Transaction {
 		let offset = BlindingFactor::zero();
 
 		// Initialize a new tx body and sort everything.
-		let body =
-			TransactionBody::init(inputs, outputs, kernels, false).expect("sorting, not verifying");
+		let body = TransactionBody::init(inputs, outputs, kernels, assets, false)
+			.expect("sorting, not verifying");
 
 		Transaction { offset, body }
 	}
@@ -1042,15 +1084,18 @@ pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 	let mut n_inputs = 0;
 	let mut n_outputs = 0;
 	let mut n_kernels = 0;
+	let mut n_assets = 0;
 	for tx in txs.iter() {
 		n_inputs += tx.body.inputs.len();
 		n_outputs += tx.body.outputs.len();
 		n_kernels += tx.body.kernels.len();
+		n_assets += tx.body.assets.len();
 	}
 
 	let mut inputs: Vec<Input> = Vec::with_capacity(n_inputs);
 	let mut outputs: Vec<Output> = Vec::with_capacity(n_outputs);
 	let mut kernels: Vec<TxKernel> = Vec::with_capacity(n_kernels);
+	let mut assets: Vec<AssetAction> = Vec::with_capacity(n_assets);
 
 	// we will sum these together at the end to give us the overall offset for the
 	// transaction
@@ -1062,6 +1107,7 @@ pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 		inputs.append(&mut tx.body.inputs);
 		outputs.append(&mut tx.body.outputs);
 		kernels.append(&mut tx.body.kernels);
+		assets.append(&mut tx.body.assets);
 	}
 
 	// Sort inputs and outputs during cut_through.
@@ -1079,7 +1125,7 @@ pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 	//   * cut-through outputs
 	//   * full set of tx kernels
 	//   * sum of all kernel offsets
-	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
+	let tx = Transaction::new(inputs, outputs, kernels, assets).with_offset(total_kernel_offset);
 
 	Ok(tx)
 }
@@ -1090,6 +1136,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];
+	let mut assets: Vec<AssetAction> = vec![];
 
 	// we will subtract these at the end to give us the overall offset for the
 	// transaction
@@ -1110,6 +1157,12 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	for mk_kernel in mk_tx.body.kernels {
 		if !tx.body.kernels.contains(&mk_kernel) && !kernels.contains(&mk_kernel) {
 			kernels.push(mk_kernel);
+		}
+	}
+
+	for mk_asset in mk_tx.body.assets {
+		if !tx.body.assets.contains(&mk_asset) && !assets.contains(&mk_asset) {
+			assets.push(mk_asset);
 		}
 	}
 
@@ -1144,7 +1197,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	kernels.sort_unstable();
 
 	// Build a new tx from the above data.
-	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
+	let tx = Transaction::new(inputs, outputs, kernels, assets).with_offset(total_kernel_offset);
 	Ok(tx)
 }
 

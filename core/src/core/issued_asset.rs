@@ -1,6 +1,7 @@
 //use serde::de::{Deserialize, Deserializer, SeqAccess, Visitor};
 //use serde::ser::{Serialize, SerializeSeq, Serializer};
 use serde_derive::{Deserialize, Serialize};
+use std::hash::{Hash, Hasher};
 
 use crate::core::hash::DefaultHashable;
 use crate::ser::{self, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
@@ -8,7 +9,16 @@ use crate::util::secp::{key::PublicKey, ContextFlag, Message, Secp256k1, Signatu
 
 use super::asset::Asset;
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+pub enum AssetAction {
+	New(IssuedAsset, Signature),
+	Issue(u128, PublicKey, Signature),
+	Withdraw(u128, PublicKey, Signature),
+	ChangeOwner(PublicKey, Signature),
+	None,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
 pub struct IssuedAsset {
 	supply: u128,
 	owner: PublicKey,
@@ -125,3 +135,53 @@ impl PMMRable for IssuedAsset {
 }
 
 impl DefaultHashable for IssuedAsset {}
+
+impl Readable for AssetAction {
+	fn read(reader: &mut dyn Reader) -> Result<AssetAction, ser::Error> {
+		let len = reader.read_u32()?;
+		let vec = reader.read_fixed_bytes(len as usize)?;
+
+		bincode::deserialize::<AssetAction>(&vec[..]).map_err(|_| {
+			ser::Error::IOErr(
+				"asset action deserialize error".to_owned(),
+				std::io::ErrorKind::InvalidInput,
+			)
+		})
+	}
+}
+
+impl Writeable for AssetAction {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		let vec = bincode::serialize(&self).map_err(|_| {
+			ser::Error::IOErr(
+				"asset action deserialize error".to_owned(),
+				std::io::ErrorKind::InvalidInput,
+			)
+		})?;
+		let len = vec.len();
+		writer.write_u32(len as u32);
+		writer.write_fixed_bytes(&vec)?;
+
+		Ok(())
+	}
+}
+
+impl Hash for AssetAction {
+	fn hash<H: Hasher>(&self, state: &mut H) {
+		bincode::serialize(&self).unwrap().hash(state);
+	}
+}
+
+// impl FixedLength for AssetAction {
+// 	const LEN: usize = 114;
+// }
+
+// impl PMMRable for AssetAction {
+// 	type E = Self;
+
+// 	fn as_elmt(&self) -> Self::E {
+// 		self.clone()
+// 	}
+// }
+
+// impl DefaultHashable for AssetAction {}
