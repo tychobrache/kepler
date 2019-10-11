@@ -12,8 +12,8 @@ use super::asset::Asset;
 #[derive(Copy, Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub enum AssetAction {
 	New(IssuedAsset, Signature),
-	Issue(u128, PublicKey, Signature),
-	Withdraw(u128, PublicKey, Signature),
+	Issue(u128, Signature),
+	Withdraw(u128, Signature),
 	ChangeOwner(PublicKey, Signature),
 	None,
 }
