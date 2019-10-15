@@ -461,7 +461,6 @@ impl Readable for TransactionBody {
 			kernel_len as usize,
 			assets_len as usize,
 		);
-
 		if tx_block_weight > global::max_block_weight() {
 			return Err(ser::Error::TooLargeReadErr);
 		}
@@ -469,8 +468,8 @@ impl Readable for TransactionBody {
 		let inputs = read_multi(reader, input_len)?;
 		let outputs = read_multi(reader, output_len)?;
 		let kernels = read_multi(reader, kernel_len)?;
+		let assets_vec = read_multi(reader, assets_len)?;
 
-		let assets_vec = reader.read_fixed_bytes(assets_len as usize)?;
 		let assets = bincode::deserialize::<Vec<AssetAction>>(&assets_vec[..]).map_err(|_| {
 			ser::Error::IOErr(
 				"asset action deserialize error".to_owned(),
