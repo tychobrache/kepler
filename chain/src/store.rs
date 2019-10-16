@@ -36,6 +36,7 @@ const SYNC_HEAD_PREFIX: u8 = 's' as u8;
 const COMMIT_POS_PREFIX: u8 = 'c' as u8;
 const BLOCK_INPUT_BITMAP_PREFIX: u8 = 'B' as u8;
 const BLOCK_SUMS_PREFIX: u8 = 'M' as u8;
+const ASSET_PREFIX: u8 = 'A' as u8;
 
 /// All chain-related database operations
 pub struct ChainStore {
@@ -117,6 +118,14 @@ impl ChainStore {
 			self.db
 				.get_ser(&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec())),
 			&format!("Output position for: {:?}", commit),
+		)
+	}
+
+	/// Get asset from index.
+	pub fn get_issued_asset(&self, bytes: &[u8]) -> Result<u64, Error> {
+		option_to_not_found(
+			self.db.get_ser(&to_key(ASSET_PREFIX, &mut bytes.to_vec())),
+			&format!("Issue asset: {:?}", bytes),
 		)
 	}
 
@@ -265,6 +274,14 @@ impl<'a> Batch<'a> {
 			self.db
 				.get_ser(&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec())),
 			&format!("Output position for commit: {:?}", commit),
+		)
+	}
+
+	/// Get asset from index.
+	pub fn get_issued_asset(&self, bytes: &[u8]) -> Result<u64, Error> {
+		option_to_not_found(
+			self.db.get_ser(&to_key(ASSET_PREFIX, &mut bytes.to_vec())),
+			&format!("Issue asset: {:?}", bytes),
 		)
 	}
 

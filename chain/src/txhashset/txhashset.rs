@@ -882,6 +882,14 @@ impl<'a> Extension<'a> {
 		)
 	}
 
+	pub fn asset_view(&'a self, asset: &Asset) -> Option<IssuedAsset> {
+		if let Ok(pos) = self.batch.get_issued_asset(asset.to_bytes()) {
+			self.asset_pmmr.get_data(pos)
+		} else {
+			None
+		}
+	}
+
 	/// Apply a new block to the existing state.
 	///
 	/// Applies the following -

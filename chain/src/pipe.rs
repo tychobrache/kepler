@@ -142,6 +142,9 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 		// Validate the block against the UTXO set.
 		validate_utxo(b, &mut extension)?;
 
+		// validate the asset action.
+		validate_asset(b, &mut extension)?;
+
 		// Using block_sums (utxo_sum, kernel_sum) for the previous block from the db
 		// we can verify_kernel_sums across the full UTXO sum and full kernel sum
 		// accounting for inputs/outputs/kernels in this new block.
@@ -648,4 +651,11 @@ pub fn rewind_and_apply_fork(b: &Block, ext: &mut txhashset::Extension<'_>) -> R
 
 fn validate_utxo(block: &Block, ext: &txhashset::Extension<'_>) -> Result<(), Error> {
 	ext.utxo_view().validate_block(block)
+}
+
+fn validate_asset(block: &Block, ext: &txhashset::Extension<'_>) -> Result<(), Error> {
+	for asset_action in block.assets.iter() {
+		let issued_asset = ext.asset_view();
+		// TODO validate asset action
+	}
 }
