@@ -883,8 +883,8 @@ impl<'a> Extension<'a> {
 	}
 
 	pub fn asset_view(&'a self, asset: &Asset) -> Option<IssuedAsset> {
-		if let Ok(pos) = self.batch.get_issued_asset(asset.to_bytes()) {
-			self.asset_pmmr.get_data(pos)
+		if let Ok(issued_asset) = self.batch.get_issued_asset(asset) {
+			Some(issued_asset)
 		} else {
 			None
 		}
@@ -905,6 +905,14 @@ impl<'a> Extension<'a> {
 			let pos = self.apply_output(out)?;
 			// Update the output_pos index for the new output.
 			self.batch.save_output_pos(&out.commitment(), pos)?;
+		}
+
+		for action in b.assets() {
+			if action.is_new() {
+				let asset = action.issued_asset().unwrap();
+				let pos = self.apply_issued_asset(&asset)?;
+				self.batch.save_issued_asset(asset.asset(), &asset)?;
+			}
 		}
 
 		for input in b.inputs() {
@@ -998,6 +1006,11 @@ impl<'a> Extension<'a> {
 		self.kernel_pmmr
 			.push(kernel)
 			.map_err(&ErrorKind::TxHashSetErr)?;
+		Ok(())
+	}
+
+	fn apply_issued_asset(&mut self, asset: &IssuedAsset) -> Result<(), Error> {
+		self.issue_pmmr.push(asset).map_err(&ErrorKind::AssetErr)?;
 		Ok(())
 	}
 
@@ -1303,6 +1316,15 @@ impl<'a> Extension<'a> {
 		for pos in self.output_pmmr.leaf_pos_iter() {
 			if let Some(out) = self.output_pmmr.get_data(pos) {
 				self.batch.save_output_pos(&out.commit, pos)?;
+				count += 1;
+			}
+		}
+
+		let mut count = 0;
+		for asset in self.issue_pmmr.leaf_pos_iter() {
+			if let Some(issued_asset) = self.issue_pmmr.get_data(asset) {
+				self.batch
+					.save_issued_asset(issued_asset.asset(), &issued_asset)?;
 				count += 1;
 			}
 		}

@@ -15,7 +15,9 @@
 //! Implements storage primitives required by the chain
 
 use crate::core::consensus::HeaderInfo;
+use crate::core::core::asset::Asset;
 use crate::core::core::hash::{Hash, Hashed};
+use crate::core::core::issued_asset::IssuedAsset;
 use crate::core::core::{Block, BlockHeader, BlockSums};
 use crate::core::pow::Difficulty;
 use crate::types::Tip;
@@ -122,9 +124,10 @@ impl ChainStore {
 	}
 
 	/// Get asset from index.
-	pub fn get_issued_asset(&self, bytes: &[u8]) -> Result<u64, Error> {
+	pub fn get_issued_asset(&self, bytes: &Asset) -> Result<IssuedAsset, Error> {
 		option_to_not_found(
-			self.db.get_ser(&to_key(ASSET_PREFIX, &mut bytes.to_vec())),
+			self.db
+				.get_ser(&to_key(ASSET_PREFIX, &mut bytes.to_bytes().to_vec())),
 			&format!("Issue asset: {:?}", bytes),
 		)
 	}
@@ -268,6 +271,12 @@ impl<'a> Batch<'a> {
 		)
 	}
 
+	/// Save asset to index.
+	pub fn save_issued_asset(&self, bytes: &Asset, asset: &IssuedAsset) -> Result<(), Error> {
+		self.db
+			.put_ser(&to_key(ASSET_PREFIX, &mut bytes.to_bytes().to_vec()), asset)
+	}
+
 	/// Get output_pos from index.
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
 		option_to_not_found(
@@ -278,9 +287,10 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Get asset from index.
-	pub fn get_issued_asset(&self, bytes: &[u8]) -> Result<u64, Error> {
+	pub fn get_issued_asset(&self, bytes: &Asset) -> Result<IssuedAsset, Error> {
 		option_to_not_found(
-			self.db.get_ser(&to_key(ASSET_PREFIX, &mut bytes.to_vec())),
+			self.db
+				.get_ser(&to_key(ASSET_PREFIX, &mut bytes.to_bytes().to_vec())),
 			&format!("Issue asset: {:?}", bytes),
 		)
 	}

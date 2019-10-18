@@ -71,6 +71,9 @@ pub enum ErrorKind {
 	/// One of the MMR sizes in the block header is invalid
 	#[fail(display = "Invalid MMR Size")]
 	InvalidMMRSize,
+	/// One of the asset action in the block is invalid
+	#[fail(display = "Invalid Asset Action")]
+	InvalidAsset,
 	/// Error from underlying keychain impl
 	#[fail(display = "Keychain Error")]
 	Keychain(keychain::Error),
@@ -119,6 +122,9 @@ pub enum ErrorKind {
 	/// Error with the txhashset
 	#[fail(display = "TxHashSetErr: {}", _0)]
 	TxHashSetErr(String),
+	/// Error with the asset
+	#[fail(display = "AssetErr: {}", _0)]
+	AssetErr(String),
 	/// Tx not valid based on lock_height.
 	#[fail(display = "Transaction Lock Height")]
 	TxLockHeight,

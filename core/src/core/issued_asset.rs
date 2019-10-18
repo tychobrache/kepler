@@ -11,11 +11,47 @@ use super::asset::Asset;
 
 #[derive(Copy, Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub enum AssetAction {
-	New(IssuedAsset, Signature),
-	Issue(u128, Signature),
-	Withdraw(u128, Signature),
-	ChangeOwner(PublicKey, Signature),
-	None,
+	New(Asset, IssuedAsset, Signature),
+	Issue(Asset, u128, Signature),
+	Withdraw(Asset, u128, Signature),
+	ChangeOwner(Asset, PublicKey, Signature),
+}
+
+impl AssetAction {
+	pub fn valid(&self, pk: &PublicKey) -> bool {
+		let (bytes, sign) = match self {
+			AssetAction::New(_, issue, sign) => (bincode::serialize(&issue).unwrap(), sign),
+			AssetAction::Issue(_, num, sign) => (bincode::serialize(&num).unwrap(), sign),
+			AssetAction::Withdraw(_, num, sign) => (bincode::serialize(&num).unwrap(), sign),
+			AssetAction::ChangeOwner(_, pk, sign) => (bincode::serialize(&pk).unwrap(), sign),
+		};
+		let message = &Message::from_bytes(&bytes).unwrap();
+		let secp = Secp256k1::with_caps(ContextFlag::VerifyOnly);
+		secp.verify(&message, &sign, pk).is_ok()
+	}
+
+	pub fn asset(&self) -> Asset {
+		match self {
+			AssetAction::New(asset, _, _)
+			| AssetAction::Issue(asset, _, _)
+			| AssetAction::Withdraw(asset, _, _)
+			| AssetAction::ChangeOwner(asset, _, _) => asset.clone(),
+		}
+	}
+
+	pub fn is_new(&self) -> bool {
+		match self {
+			AssetAction::New(_, _, _) => true,
+			_ => false,
+		}
+	}
+
+	pub fn issued_asset(&self) -> Option<IssuedAsset> {
+		match self {
+			AssetAction::New(_, issued_asset, _) => Some(issued_asset.clone()),
+			_ => None,
+		}
+	}
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
@@ -43,12 +79,12 @@ impl IssuedAsset {
 		&self.asset
 	}
 
-	pub fn new(supply: u128, owner: PublicKey, mintable: bool, seed: &str) -> Self {
+	pub fn new(supply: u128, owner: PublicKey, mintable: bool, asset: Asset) -> Self {
 		Self {
-			supply: supply,
-			owner: owner,
-			mintable: mintable,
-			asset: seed.into(),
+			supply,
+			owner,
+			mintable,
+			asset,
 		}
 	}
 

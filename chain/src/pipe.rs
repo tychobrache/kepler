@@ -17,6 +17,7 @@
 use crate::chain::OrphanBlockPool;
 use crate::core::consensus;
 use crate::core::core::hash::Hashed;
+use crate::core::core::issued_asset::AssetAction;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::Committed;
 use crate::core::core::{Block, BlockHeader, BlockSums};
@@ -654,8 +655,29 @@ fn validate_utxo(block: &Block, ext: &txhashset::Extension<'_>) -> Result<(), Er
 }
 
 fn validate_asset(block: &Block, ext: &txhashset::Extension<'_>) -> Result<(), Error> {
-	for asset_action in block.assets.iter() {
-		let issued_asset = ext.asset_view();
-		// TODO validate asset action
+	for asset_action in block.assets().iter() {
+		let asset = asset_action.asset();
+
+		let issued_asset = match asset_action {
+			AssetAction::New(_, issued_asset, _) => {
+				if ext.asset_view(&asset).is_some() {
+					return Err(ErrorKind::InvalidAsset.into());
+				}
+				issued_asset.clone()
+			}
+			_ => {
+				let asset_option = ext.asset_view(&asset);
+				if asset_option.is_none() {
+					return Err(ErrorKind::InvalidAsset.into());
+				}
+				asset_option.unwrap()
+			}
+		};
+
+		if !asset_action.valid(issued_asset.owner()) {
+			return Err(ErrorKind::InvalidAsset.into());
+		}
 	}
+
+	Ok(())
 }
