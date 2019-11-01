@@ -196,7 +196,7 @@ pub fn genesis_main() -> core::Block {
 		output_mmr_size: 1,
 		kernel_mmr_size: 1,
 		pow: ProofOfWork {
-			total_difficulty: Difficulty::from_num(2_u64.pow(20)),
+			total_difficulty: Difficulty::from_num(2_u64.pow(20)), // TODOSUN can change it to lowerly when test
 			secondary_scaling: 1856,
 			nonce: 46,
 			proof: Proof {
