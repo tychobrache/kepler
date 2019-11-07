@@ -140,11 +140,11 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 		// to applying the new block.
 		verify_coinbase_maturity(b, &mut extension)?;
 
-		// Validate the block against the UTXO set.
-		validate_utxo(b, &mut extension)?;
-
 		// validate the asset action.
 		validate_asset(b, &mut extension)?;
+
+		// Validate the block against the UTXO set.
+		validate_utxo(b, &mut extension)?;
 
 		// Using block_sums (utxo_sum, kernel_sum) for the previous block from the db
 		// we can verify_kernel_sums across the full UTXO sum and full kernel sum
@@ -663,7 +663,7 @@ fn validate_asset(block: &Block, ext: &txhashset::Extension<'_>) -> Result<(), E
 				if ext.asset_view(&asset).is_some() {
 					return Err(ErrorKind::InvalidAsset.into());
 				}
-				issued_asset.clone()
+				issue_asset
 			}
 			_ => {
 				let asset_option = ext.asset_view(&asset);
@@ -676,6 +676,13 @@ fn validate_asset(block: &Block, ext: &txhashset::Extension<'_>) -> Result<(), E
 
 		if !asset_action.valid(issued_asset.owner()) {
 			return Err(ErrorKind::InvalidAsset.into());
+		}
+
+		// save utxo to db
+		for output in block.outputs() {
+			if output.asset == issued_asset.asset {
+				ext.save_output(output)
+			}
 		}
 	}
 

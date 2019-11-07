@@ -960,6 +960,13 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	pub fn save_output(&mut self, out: &Output) -> Result<(), Error> {
+		let pos = self.apply_output(out)?;
+		// Update the output_pos index for the new output.
+		self.batch.save_output_pos(&out.commitment(), pos)?;
+		Ok(())
+	}
+
 	fn apply_output(&mut self, out: &Output) -> Result<(u64), Error> {
 		let commit = out.commitment();
 
