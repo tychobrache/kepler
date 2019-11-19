@@ -654,7 +654,7 @@ fn validate_utxo(block: &Block, ext: &txhashset::Extension<'_>) -> Result<(), Er
 	ext.utxo_view().validate_block(block)
 }
 
-fn validate_asset(block: &Block, ext: &mut txhashset::Extension<'_>) -> Result<(), Error> {
+fn validate_asset(block: &Block, ext: &txhashset::Extension<'_>) -> Result<(), Error> {
 	for asset_action in block.assets().iter() {
 		let asset = asset_action.asset();
 
@@ -676,13 +676,6 @@ fn validate_asset(block: &Block, ext: &mut txhashset::Extension<'_>) -> Result<(
 
 		if !asset_action.valid(issued_asset.owner()) {
 			return Err(ErrorKind::InvalidAsset.into());
-		}
-
-		// save utxo to db
-		for output in block.outputs() {
-			if &output.asset == issued_asset.asset() {
-				ext.save_output(output);
-			}
 		}
 	}
 
