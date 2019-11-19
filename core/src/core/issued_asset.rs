@@ -39,6 +39,14 @@ impl AssetAction {
 		}
 	}
 
+	pub fn amount(&self) -> u128 {
+		match self {
+			AssetAction::New(_, asset, _) => *asset.supply(),
+			AssetAction::Issue(_, amount, _) | AssetAction::Withdraw(_, amount, _) => *amount,
+			AssetAction::ChangeOwner(asset, _, _) => 0u128,
+		}
+	}
+
 	pub fn is_new(&self) -> bool {
 		match self {
 			AssetAction::New(_, _, _) => true,
