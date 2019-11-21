@@ -342,7 +342,7 @@ mod test {
 				input(Asset::default(), 10, key_id1),
 				input(Asset::default(), 12, key_id2),
 				output(Asset::default(), 20, key_id3),
-				asset(AssetAction::None),
+				// asset(AssetAction::None),
 				with_fee(2),
 			],
 			&keychain,
