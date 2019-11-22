@@ -28,6 +28,77 @@ use crate::libtx::{
 };
 use crate::util::{secp, static_secp_instance};
 
+/// output asset mint reward output
+pub fn mint_asset_output(
+	keychain: &K,
+	builder: &B,
+	key_id: &Identifier,
+	fees: u64,
+	height: u64,
+	test_mode: bool,
+	asset: Asset,
+	value: u64,
+) -> Result<(Output, TxKernel), Error>
+where
+	K: Keychain,
+	B: ProofBuild,
+{
+	let switch = &SwitchCommitmentType::Regular;
+	let commit = keychain.commit(value, key_id, switch, asset.into())?;
+
+	trace!("Mint Asset - Pedersen Commit is: {:?}", commit,);
+
+	let rproof = proof::create(
+		keychain, builder, value, key_id, switch, commit, None, asset,
+	)?;
+
+	let output = Output {
+		features: OutputFeatures::Plain,
+		commit: commit,
+		proof: rproof,
+		asset: asset,
+	};
+
+	let secp = static_secp_instance();
+	let secp = secp.lock();
+	let over_commit = secp.commit_value(value)?;
+	let out_commit = output.commitment();
+	let excess = secp.commit_sum(vec![out_commit], vec![over_commit])?;
+	let pubkey = excess.to_pubkey(&secp)?;
+
+	// NOTE: Remember we sign the fee *and* the lock_height.
+	// For a coinbase output the fee is 0 and the lock_height is 0
+	let msg = kernel_sig_msg(0, 0, KernelFeatures::Plain)?;
+	let sig = match test_mode {
+		true => {
+			let test_nonce = secp::key::SecretKey::from_slice(&secp, &[1; 32])?;
+			aggsig::sign_from_key_id(
+				&secp,
+				keychain,
+				&msg,
+				value,
+				&key_id,
+				Some(&test_nonce),
+				Some(&pubkey),
+			)?
+		}
+		false => {
+			aggsig::sign_from_key_id(&secp, keychain, &msg, value, &key_id, None, Some(&pubkey))?
+		}
+	};
+
+	let proof = TxKernel {
+		features: KernelFeatures::Plain,
+		excess: excess,
+		excess_sig: sig,
+		fee: 0,
+		// lock_height here is 0
+		// *not* the maturity of the coinbase output (only spendable 1,440 blocks later)
+		lock_height: 0,
+	};
+	Ok((output, proof))
+}
+
 /// output a reward output
 pub fn output<K, B>(
 	keychain: &K,
