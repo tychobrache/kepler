@@ -13,22 +13,24 @@
 // limitations under the License.
 
 pub mod common;
+use self::core::libtx::{self};
+use self::core::pow::Difficulty;
 use crate::common::{new_block, tx1i2o, tx2i1o, txspend1i1o};
 use crate::core::consensus::BLOCK_OUTPUT_WEIGHT;
 use crate::core::core::asset::Asset;
 use crate::core::core::block::Error;
 use crate::core::core::hash::Hashed;
 use crate::core::core::id::ShortIdentifiable;
-use crate::core::core::transaction::{self, Transaction};
+use crate::core::core::transaction::{self, Transaction, Weighting};
 use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use crate::core::core::Committed;
 use crate::core::core::{
 	Block, BlockHeader, CompactBlock, HeaderVersion, KernelFeatures, OutputFeatures,
 };
-use crate::core::libtx::build::{self, input, output, with_fee};
+use crate::core::libtx::build::{self, input, output, with_fee, mint};
 use crate::core::libtx::ProofBuilder;
 use crate::core::{global, ser};
-use crate::keychain::{BlindingFactor, ExtKeychain, Keychain};
+use crate::keychain::{BlindingFactor, ExtKeychain, ExtKeychainPath, Keychain};
 use crate::util::secp;
 use crate::util::RwLock;
 use chrono::Duration;
@@ -162,6 +164,90 @@ fn empty_block_with_coinbase_is_valid() {
 
 	// the block should be valid here (single coinbase output with corresponding
 	// txn kernel)
+	assert!(b
+		.validate(&BlindingFactor::zero(), verifier_cache())
+		.is_ok());
+}
+
+// use std::sync::Arc;
+// use crate::util::RwLock;
+// use crate::core::verifier_cache::{LruVerifierCache, VerifierCache};
+
+// fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
+// 	Arc::new(RwLock::new(LruVerifierCache::new()))
+// }
+
+#[test]
+fn block_with_mint_action() {
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
+	let builder = ProofBuilder::new(&keychain);
+	let prev = BlockHeader::default();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
+	let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
+	let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
+	let key_id4 = ExtKeychainPath::new(1, 4, 0, 0, 0).to_identifier();
+
+	let vc = verifier_cache();
+
+	let btc_asset: Asset = "BTC".into();
+	// TODO mint fees
+	// TODO multiple mint outputs
+
+	let tx = build::transaction(
+		vec![
+			input(Asset::default(), 10, key_id1),
+			input(Asset::default(), 12, key_id2),
+			output(Asset::default(), 20, key_id3),
+			mint(btc_asset, 99, key_id4),
+			// mint(btc_asset, 99),
+			// output(btc_asset, 99, key_id4),
+			with_fee(2),
+		],
+		&keychain,
+		&builder,
+	)
+	.unwrap();
+
+	let height = prev.height + 1;
+
+	let fees = tx.fee();
+
+	let reward_output =
+		libtx::reward::output(&keychain, &builder, &key_id, fees, height, false).unwrap();
+	let b = core::core::Block::new(&prev, vec![tx], Difficulty::min(), reward_output).unwrap();
+
+	// let b = new_block(vec![&tx], &keychain, &builder, &prev, &key_id);
+
+	// assert_eq!(b.inputs().len(), 2);
+	// assert_eq!(b.outputs().len(), 2);
+	// assert_eq!(b.kernels().len(), 2);
+
+	let coinbase_outputs = b
+		.outputs()
+		.iter()
+		.filter(|out| out.is_coinbase())
+		.map(|o| o.clone())
+		.collect::<Vec<_>>();
+	assert_eq!(coinbase_outputs.len(), 1);
+
+	let coinbase_kernels = b
+		.kernels()
+		.iter()
+		.filter(|out| out.is_coinbase())
+		.map(|o| o.clone())
+		.collect::<Vec<_>>();
+	assert_eq!(coinbase_kernels.len(), 1);
+
+	// tx.validate(Weighting::AsTransaction, vc.clone()).unwrap();
+
+	// the block should be valid here (single coinbase output with corresponding
+	// txn kernel)
+	// match b.validate(&BlindingFactor::zero(), verifier_cache()) {
+	// 	Err(err) => println!("validate err: {}", err),
+	// 	Ok(_) => (),
+	// }
+
 	assert!(b
 		.validate(&BlindingFactor::zero(), verifier_cache())
 		.is_ok());

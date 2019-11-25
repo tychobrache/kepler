@@ -729,8 +729,9 @@ impl Block {
 		self.verify_kernel_lock_heights()?;
 		self.verify_coinbase()?;
 
+		println!("verify_coinbase success");
 		// mint asset amount
-		let sum = self.assets().iter().fold(0u128, |sum, a| sum + a.amount());
+		// let sum = self.assets().iter().fold(0u128, |sum, a| sum + a.amount());
 
 		// take the kernel offset for this block (block offset minus previous) and
 		// verify.body.outputs and kernel sums
@@ -739,6 +740,8 @@ impl Block {
 			self.header.overage(),
 			self.block_kernel_offset(prev_kernel_offset.clone())?,
 		)?;
+
+		println!("verify_kernel_sums success");
 
 		Ok(kernel_sum)
 	}
@@ -764,6 +767,7 @@ impl Block {
 		{
 			let secp = static_secp_instance();
 			let secp = secp.lock();
+
 			let over_commit = secp.commit_value(reward(self.header.height, self.total_fees()))?;
 
 			let out_adjust_sum =

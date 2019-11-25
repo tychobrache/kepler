@@ -411,6 +411,12 @@ pub struct TransactionBody {
 	pub assets: Vec<AssetAction>,
 }
 
+// #[derive(Copy, Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+// pub struct MintAction {
+// 	pub supply: u128,
+// 	pub asset: Asset,
+// }
+
 /// PartialEq
 impl PartialEq for TransactionBody {
 	fn eq(&self, l: &TransactionBody) -> bool {
