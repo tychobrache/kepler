@@ -609,6 +609,27 @@ impl TransactionBody {
 		self.fee() as i64
 	}
 
+	pub fn mint_overage(&self) -> Result<Commitment, Error> {
+		// created non-blinded commitments for all minting assets
+		//
+		// A, B, C, ...
+		// C_a = A * supply_a + 0 * G 
+		// C_b = B * supply_b + 0 * G 
+		// C_c = C * supply_c + 0 * G 
+		// ...
+		// mint_overage = C_a + C_b + C_c + ...
+		let secp = static_secp_instance();
+		let secp = secp.lock();
+
+		let commitments = self.assets.iter().map( |asset_action| 
+			// FIXME: fix unwrap
+			secp.commit_value_with_generator(asset_action.supply, asset_action.asset.into()).unwrap()
+		).collect();
+
+		// FIXME: fix unwrap
+		Ok(secp.commit_sum(commitments, vec![]).unwrap())
+	}
+
 	/// Calculate transaction weight
 	pub fn body_weight(&self) -> usize {
 		TransactionBody::weight(self.inputs.len(), self.outputs.len(), self.kernels.len())
@@ -1034,7 +1055,7 @@ impl Transaction {
 	) -> Result<(), Error> {
 		self.body.validate(weighting, verifier)?;
 		self.body.verify_features()?;
-		self.verify_kernel_sums(self.overage(), self.offset.clone())?;
+		self.verify_kernel_sums(self.overage(), Some(self.body.mint_overage()?), self.offset.clone())?;
 		Ok(())
 	}
 

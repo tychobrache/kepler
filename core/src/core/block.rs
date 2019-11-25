@@ -666,6 +666,10 @@ impl Block {
 			.fold(0, |acc, ref x| acc.saturating_add(x.fee))
 	}
 
+	fn mint_overage(&self) -> Result<Commitment, Error> {
+		Ok(self.body.mint_overage().unwrap())
+	}
+
 	/// Matches any output with a potential spending input, eliminating them
 	/// from the block. Provides a simple way to cut-through the block. The
 	/// elimination is stable with respect to the order of inputs and outputs.
@@ -732,12 +736,14 @@ impl Block {
 		println!("verify_coinbase success");
 		// mint asset amount
 		// let sum = self.assets().iter().fold(0u128, |sum, a| sum + a.amount());
+		let mint_overage = self.mint_overage()?;
 
 		// take the kernel offset for this block (block offset minus previous) and
 		// verify.body.outputs and kernel sums
 		// TODO add mint amount to it
 		let (_utxo_sum, kernel_sum) = self.verify_kernel_sums(
 			self.header.overage(),
+			Some(mint_overage),
 			self.block_kernel_offset(prev_kernel_offset.clone())?,
 		)?;
 

@@ -150,28 +150,16 @@ where
 	)
 }
 
-/// Mint an asset, and add output for that supply 
-pub fn mint<K, B>(asset: Asset, supply: u64, key_id: Identifier) -> Box<Append<K, B>>
+/// Mint an asset, and add output for that supply
+pub fn mint<K, B>(asset: Asset, supply: u64) -> Box<Append<K, B>>
 where
 	K: Keychain,
 	B: ProofBuild,
 {
 	Box::new(
 		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-			let (output, kern2) =
-				reward::mint_asset_output(build.keychain, build.builder, &key_id, false, asset, supply)
-					.unwrap();
-
-					// Note:
-					//
-					// the "kern" is actually not replaceable. only with_fees and
-					// with_locktime persist, after the `transaction` function does the
-					// blinding factor splitting
-					//
-						// what is the excess to add to the sum?
 			(
-				tx.with_asset(AssetAction { asset, supply })
-					.with_output(output),
+				tx.with_asset(AssetAction { asset, supply }),
 				kern,
 				sum,
 			)
@@ -313,7 +301,8 @@ where
 	let skey = k1.secret_key(&keychain.secp())?;
 	kern.excess = ctx.keychain.secp().commit(0, skey)?;
 	let pubkey = &kern.excess.to_pubkey(&keychain.secp())?;
-	kern.excess_sig = aggsig::sign_with_blinding(&keychain.secp(), &msg, &k1, Some(&pubkey)).unwrap();
+	kern.excess_sig =
+		aggsig::sign_with_blinding(&keychain.secp(), &msg, &k1, Some(&pubkey)).unwrap();
 
 	// Store the kernel offset (k2) on the tx.
 	// Commitments will sum correctly when accounting for the offset.

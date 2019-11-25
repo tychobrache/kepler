@@ -83,7 +83,9 @@ where
 				Some(&pubkey),
 			)?
 		}
-		false => aggsig::sign_from_key_id(&secp, keychain, &msg, value, &key_id, None, Some(&pubkey))?,
+		false => {
+			aggsig::sign_from_key_id(&secp, keychain, &msg, value, &key_id, None, Some(&pubkey))?
+		}
 	};
 
 	let proof = TxKernel {
@@ -147,7 +149,9 @@ where
 				Some(&pubkey),
 			)?
 		}
-		false => aggsig::sign_from_key_id(&secp, keychain, &msg, value, &key_id, None, Some(&pubkey))?,
+		false => {
+			aggsig::sign_from_key_id(&secp, keychain, &msg, value, &key_id, None, Some(&pubkey))?
+		}
 	};
 	let proof = TxKernel {
 		features: KernelFeatures::Plain,

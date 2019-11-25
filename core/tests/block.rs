@@ -27,7 +27,7 @@ use crate::core::core::Committed;
 use crate::core::core::{
 	Block, BlockHeader, CompactBlock, HeaderVersion, KernelFeatures, OutputFeatures,
 };
-use crate::core::libtx::build::{self, input, output, with_fee, mint};
+use crate::core::libtx::build::{self, input, mint, output, with_fee};
 use crate::core::libtx::ProofBuilder;
 use crate::core::{global, ser};
 use crate::keychain::{BlindingFactor, ExtKeychain, ExtKeychainPath, Keychain};
@@ -187,6 +187,7 @@ fn block_with_mint_action() {
 	let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
 	let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
 	let key_id4 = ExtKeychainPath::new(1, 4, 0, 0, 0).to_identifier();
+	let key_id5 = ExtKeychainPath::new(1, 5, 0, 0, 0).to_identifier();
 
 	let vc = verifier_cache();
 
@@ -199,9 +200,9 @@ fn block_with_mint_action() {
 			input(Asset::default(), 10, key_id1),
 			input(Asset::default(), 12, key_id2),
 			output(Asset::default(), 20, key_id3),
-			mint(btc_asset, 99, key_id4),
-			// mint(btc_asset, 99),
-			// output(btc_asset, 99, key_id4),
+			mint(btc_asset, 100),
+			output(btc_asset, 50, key_id4),
+			output(btc_asset, 50, key_id5),
 			with_fee(2),
 		],
 		&keychain,
@@ -215,7 +216,7 @@ fn block_with_mint_action() {
 
 	let reward_output =
 		libtx::reward::output(&keychain, &builder, &key_id, fees, height, false).unwrap();
-	let b = core::core::Block::new(&prev, vec![tx], Difficulty::min(), reward_output).unwrap();
+	let b = core::core::Block::new(&prev, vec![tx.clone()], Difficulty::min(), reward_output).unwrap();
 
 	// let b = new_block(vec![&tx], &keychain, &builder, &prev, &key_id);
 
@@ -239,7 +240,7 @@ fn block_with_mint_action() {
 		.collect::<Vec<_>>();
 	assert_eq!(coinbase_kernels.len(), 1);
 
-	// tx.validate(Weighting::AsTransaction, vc.clone()).unwrap();
+	tx.validate(Weighting::AsTransaction, vc.clone()).unwrap();
 
 	// the block should be valid here (single coinbase output with corresponding
 	// txn kernel)
@@ -269,7 +270,7 @@ fn remove_coinbase_output_flag() {
 
 	assert_eq!(b.verify_coinbase(), Err(Error::CoinbaseSumMismatch));
 	assert!(b
-		.verify_kernel_sums(b.header.overage(), b.header.total_kernel_offset())
+		.verify_kernel_sums(b.header.overage(), None, b.header.total_kernel_offset())
 		.is_ok());
 	assert_eq!(
 		b.validate(&BlindingFactor::zero(), verifier_cache()),
