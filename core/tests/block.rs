@@ -21,6 +21,7 @@ use crate::core::core::asset::Asset;
 use crate::core::core::block::Error;
 use crate::core::core::hash::Hashed;
 use crate::core::core::id::ShortIdentifiable;
+use crate::core::core::issued_asset::AssetAction;
 use crate::core::core::transaction::{self, Transaction, Weighting};
 use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use crate::core::core::Committed;
@@ -200,7 +201,10 @@ fn block_with_mint_action() {
 			input(Asset::default(), 10, key_id1),
 			input(Asset::default(), 12, key_id2),
 			output(Asset::default(), 20, key_id3),
-			mint(btc_asset, 100),
+			mint(AssetAction {
+				asset: btc_asset,
+				supply: 100,
+			}),
 			output(btc_asset, 50, key_id4),
 			output(btc_asset, 50, key_id5),
 			with_fee(2),
@@ -216,7 +220,8 @@ fn block_with_mint_action() {
 
 	let reward_output =
 		libtx::reward::output(&keychain, &builder, &key_id, fees, height, false).unwrap();
-	let b = core::core::Block::new(&prev, vec![tx.clone()], Difficulty::min(), reward_output).unwrap();
+	let b =
+		core::core::Block::new(&prev, vec![tx.clone()], Difficulty::min(), reward_output).unwrap();
 
 	// let b = new_block(vec![&tx], &keychain, &builder, &prev, &key_id);
 

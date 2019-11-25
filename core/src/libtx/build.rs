@@ -151,18 +151,14 @@ where
 }
 
 /// Mint an asset, and add output for that supply
-pub fn mint<K, B>(asset: Asset, supply: u64) -> Box<Append<K, B>>
+pub fn mint<K, B>(action: AssetAction) -> Box<Append<K, B>>
 where
 	K: Keychain,
 	B: ProofBuild,
 {
 	Box::new(
 		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-			(
-				tx.with_asset(AssetAction { asset, supply }),
-				kern,
-				sum,
-			)
+			(tx.with_asset(action), kern, sum)
 		},
 	)
 }
