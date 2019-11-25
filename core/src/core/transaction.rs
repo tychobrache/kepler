@@ -613,21 +613,25 @@ impl TransactionBody {
 		// created non-blinded commitments for all minting assets
 		//
 		// A, B, C, ...
-		// C_a = A * supply_a + 0 * G 
-		// C_b = B * supply_b + 0 * G 
-		// C_c = C * supply_c + 0 * G 
+		// C_a = A * supply_a + 0 * G
+		// C_b = B * supply_b + 0 * G
+		// C_c = C * supply_c + 0 * G
 		// ...
 		// mint_overage = C_a + C_b + C_c + ...
 		let secp = static_secp_instance();
 		let secp = secp.lock();
 
-		let commitments = self.assets.iter().map( |asset_action| 
-			// FIXME: fix unwrap
-			secp.commit_value_with_generator(asset_action.supply, asset_action.asset.into()).unwrap()
-		).collect();
+		let mut commitments = vec![];
+		for asset_action in self.assets.iter() {
+			commitments.push(
+				secp.commit_value_with_generator(asset_action.supply, asset_action.asset.into())
+					.map_err(|_| Error::AggregationError)?,
+			);
+		}
 
 		// FIXME: fix unwrap
-		Ok(secp.commit_sum(commitments, vec![]).unwrap())
+		secp.commit_sum(commitments, vec![])
+			.map_err(|_| Error::AggregationError)
 	}
 
 	/// Calculate transaction weight
@@ -1055,7 +1059,11 @@ impl Transaction {
 	) -> Result<(), Error> {
 		self.body.validate(weighting, verifier)?;
 		self.body.verify_features()?;
-		self.verify_kernel_sums(self.overage(), Some(self.body.mint_overage()?), self.offset.clone())?;
+		self.verify_kernel_sums(
+			self.overage(),
+			Some(self.body.mint_overage()?),
+			self.offset.clone(),
+		)?;
 		Ok(())
 	}
 
