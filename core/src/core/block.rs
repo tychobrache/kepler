@@ -666,8 +666,8 @@ impl Block {
 			.fold(0, |acc, ref x| acc.saturating_add(x.fee))
 	}
 
-	fn mint_overage(&self) -> Result<Commitment, Error> {
-		Ok(self.body.mint_overage().unwrap())
+	pub fn mint_overage(&self) -> Result<Commitment, Error> {
+		self.body.mint_overage().map_err(|e| Error::Transaction(e))
 	}
 
 	/// Matches any output with a potential spending input, eliminating them
