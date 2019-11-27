@@ -624,8 +624,11 @@ impl TransactionBody {
 		let mut commitments = vec![];
 		for asset_action in self.assets.iter() {
 			commitments.push(
-				secp.commit_value_with_generator(asset_action.supply, asset_action.asset.into())
-					.map_err(|_| Error::AggregationError)?,
+				secp.commit_value_with_generator(
+					asset_action.amount(),
+					asset_action.asset().into(),
+				)
+				.map_err(|_| Error::AggregationError)?,
 			);
 		}
 

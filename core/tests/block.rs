@@ -201,10 +201,7 @@ fn block_with_mint_action() {
 			input(Asset::default(), 10, key_id1),
 			input(Asset::default(), 12, key_id2),
 			output(Asset::default(), 20, key_id3),
-			mint(AssetAction {
-				asset: btc_asset,
-				supply: 100,
-			}),
+			mint(AssetAction::Issue(btc_asset, 100, Default::default())),
 			output(btc_asset, 50, key_id4),
 			output(btc_asset, 50, key_id5),
 			with_fee(2),
