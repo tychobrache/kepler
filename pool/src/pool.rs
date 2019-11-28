@@ -268,7 +268,7 @@ impl Pool {
 		header: &BlockHeader,
 	) -> Result<BlockSums, PoolError> {
 		let overage = tx.overage();
-		let mint_overage = Some(tx.body.mint_overage()?);
+		let mint_overage = tx.body.mint_overage()?;
 		let offset = (header.total_kernel_offset() + tx.offset.clone())?;
 
 		let block_sums = self.blockchain.get_block_sums(&header.hash())?;

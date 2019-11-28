@@ -666,7 +666,7 @@ impl Block {
 			.fold(0, |acc, ref x| acc.saturating_add(x.fee))
 	}
 
-	pub fn mint_overage(&self) -> Result<Commitment, Error> {
+	pub fn mint_overage(&self) -> Result<Option<Commitment>, Error> {
 		self.body.mint_overage().map_err(|e| Error::Transaction(e))
 	}
 
@@ -742,11 +742,10 @@ impl Block {
 		// TODO add mint amount to it
 		let (_utxo_sum, kernel_sum) = self.verify_kernel_sums(
 			self.header.overage(),
-			Some(mint_overage),
+			mint_overage,
 			self.block_kernel_offset(prev_kernel_offset.clone())?,
 		)?;
 
-		println!("verify_kernel_sums success");
 
 		Ok(kernel_sum)
 	}

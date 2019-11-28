@@ -462,7 +462,7 @@ fn verify_block_sums(b: &Block, ext: &mut txhashset::Extension<'_>) -> Result<()
 	// Overage is based purely on the new block.
 	// Previous block_sums have taken all previous overage into account.
 	let overage = b.header.overage();
-	let mint_overage = Some(b.mint_overage()?); // TODO Check
+	let mint_overage = b.mint_overage()?;
 
 	// Offset on the other hand is the total kernel offset from the new block.
 	let offset = b.header.total_kernel_offset();

@@ -166,6 +166,7 @@ fn build_block(
 			vec![]
 		}
 	};
+	debug!("SUN DEBUG: prepare mineable transaction ok!!!!!!!!!!!!!!");
 
 	// build the coinbase and the block itself
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
@@ -177,10 +178,14 @@ fn build_block(
 	};
 
 	let (output, kernel, block_fees) = get_coinbase(wallet_listener_url, block_fees)?;
+	debug!("SUN DEBUG: coinbase ok!!!!!!!!!!!!!!");
+
 	let mut b = core::Block::from_reward(&head, txs, output, kernel, difficulty.difficulty)?;
+	debug!("SUN DEBUG: build block ok!!!!!!!!!!!!!!");
 
 	// making sure we're not spending time mining a useless block
 	b.validate(&head.total_kernel_offset, verifier_cache)?;
+	debug!("SUN DEBUG: validate block ok!!!!!!!!!!!!!!");
 
 	b.header.pow.nonce = thread_rng().gen();
 	b.header.pow.secondary_scaling = difficulty.secondary_scaling;

@@ -609,7 +609,7 @@ impl TransactionBody {
 		self.fee() as i64
 	}
 
-	pub fn mint_overage(&self) -> Result<Commitment, Error> {
+	pub fn mint_overage(&self) -> Result<Option<Commitment>, Error> {
 		// created non-blinded commitments for all minting assets
 		//
 		// A, B, C, ...
@@ -631,9 +631,13 @@ impl TransactionBody {
 				.map_err(|_| Error::AggregationError)?,
 			);
 		}
+		if commitments.len() == 0 {
+			return Ok(None);
+		}
 
 		// FIXME: fix unwrap
 		secp.commit_sum(commitments, vec![])
+			.map(|c| Some(c))
 			.map_err(|_| Error::AggregationError)
 	}
 
@@ -1064,7 +1068,7 @@ impl Transaction {
 		self.body.verify_features()?;
 		self.verify_kernel_sums(
 			self.overage(),
-			Some(self.body.mint_overage()?),
+			self.body.mint_overage()?,
 			self.offset.clone(),
 		)?;
 		Ok(())
