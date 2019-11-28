@@ -733,7 +733,6 @@ impl Block {
 		self.verify_kernel_lock_heights()?;
 		self.verify_coinbase()?;
 
-		println!("verify_coinbase success");
 		// mint asset amount
 		// let sum = self.assets().iter().fold(0u128, |sum, a| sum + a.amount());
 		let mint_overage = self.mint_overage()?;
