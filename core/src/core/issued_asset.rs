@@ -12,8 +12,8 @@ use super::asset::Asset;
 #[derive(Copy, Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub enum AssetAction {
 	New(Asset, IssuedAsset, Signature),
-	Issue(Asset, u128, Signature),
-	Withdraw(Asset, u128, Signature),
+	Issue(Asset, u64, Signature),
+	Withdraw(Asset, u64, Signature),
 	ChangeOwner(Asset, PublicKey, Signature),
 }
 
@@ -39,11 +39,11 @@ impl AssetAction {
 		}
 	}
 
-	pub fn amount(&self) -> u128 {
+	pub fn amount(&self) -> u64 {
 		match self {
 			AssetAction::New(_, asset, _) => *asset.supply(),
 			AssetAction::Issue(_, amount, _) | AssetAction::Withdraw(_, amount, _) => *amount,
-			AssetAction::ChangeOwner(asset, _, _) => 0u128,
+			AssetAction::ChangeOwner(asset, _, _) => 0,
 		}
 	}
 
@@ -64,14 +64,14 @@ impl AssetAction {
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
 pub struct IssuedAsset {
-	supply: u128,
+	supply: u64,
 	owner: PublicKey,
 	mintable: bool,
 	asset: Asset,
 }
 
 impl IssuedAsset {
-	pub fn supply(&self) -> &u128 {
+	pub fn supply(&self) -> &u64 {
 		&self.supply
 	}
 
@@ -87,7 +87,7 @@ impl IssuedAsset {
 		&self.asset
 	}
 
-	pub fn new(supply: u128, owner: PublicKey, mintable: bool, asset: Asset) -> Self {
+	pub fn new(supply: u64, owner: PublicKey, mintable: bool, asset: Asset) -> Self {
 		Self {
 			supply,
 			owner,
@@ -117,14 +117,14 @@ impl Readable for IssuedAsset {
 	fn read(reader: &mut dyn Reader) -> Result<IssuedAsset, ser::Error> {
 		let vec = reader.read_fixed_bytes(114)?;
 
-		// supply: u128, 16 bytes
-		let mut supply_bytes = [0u8; 16];
-		supply_bytes.copy_from_slice(&vec[0..16]);
-		let supply = u128::from_be_bytes(supply_bytes);
+		// supply:u64, 16 bytes
+		let mut supply_bytes = [0u8; 8];
+		supply_bytes.copy_from_slice(&vec[0..8]);
+		let supply = u64::from_be_bytes(supply_bytes);
 
 		// owner: PublicKey,  compress 33 bytes serialize_vec(
 		let secp = Secp256k1::with_caps(ContextFlag::None);
-		let owner = PublicKey::from_slice(&secp, &vec[16..49]).map_err(|_| {
+		let owner = PublicKey::from_slice(&secp, &vec[8..41]).map_err(|_| {
 			ser::Error::IOErr(
 				"public key deserialize error".to_owned(),
 				std::io::ErrorKind::InvalidInput,
@@ -132,11 +132,11 @@ impl Readable for IssuedAsset {
 		})?;
 
 		// mintable: bool, 1 bytes
-		let mintable = vec[49] == 1u8;
+		let mintable = vec[41] == 1u8;
 
 		// asset: Asset, 64 bytes
 		let mut asset_bytes = [0u8; 64];
-		asset_bytes.copy_from_slice(&vec[50..114]);
+		asset_bytes.copy_from_slice(&vec[42..106]);
 		let asset = Asset::from_bytes(asset_bytes);
 
 		Ok(IssuedAsset {
@@ -167,7 +167,7 @@ impl Writeable for IssuedAsset {
 }
 
 impl FixedLength for IssuedAsset {
-	const LEN: usize = 114;
+	const LEN: usize = 106;
 }
 
 impl PMMRable for IssuedAsset {
@@ -210,12 +210,6 @@ impl Writeable for AssetAction {
 	}
 }
 
-impl Hash for AssetAction {
-	fn hash<H: Hasher>(&self, state: &mut H) {
-		bincode::serialize(&self).unwrap().hash(state);
-	}
-}
-
 // impl FixedLength for AssetAction {
 // 	const LEN: usize = 114;
 // }
@@ -228,4 +222,10 @@ impl Hash for AssetAction {
 // 	}
 // }
 
-// impl DefaultHashable for AssetAction {}
+impl Hash for AssetAction {
+	fn hash<H: Hasher>(&self, state: &mut H) {
+		bincode::serialize(&self).unwrap().hash(state);
+	}
+}
+
+impl DefaultHashable for AssetAction {}

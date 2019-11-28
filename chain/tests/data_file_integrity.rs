@@ -105,7 +105,15 @@ fn data_files() {
 				.process_block(b.clone(), chain::Options::MINE)
 				.unwrap();
 
-			chain.validate(false).unwrap();
+			match chain.validate(false) {
+				Err(err) => {
+					println!("chain validate err: {}", err);
+					panic!("chain validate error");
+				}
+				Ok(_) => (),
+			}
+
+			// .unwrap();
 		}
 	}
 	// Now reload the chain, should have valid indices

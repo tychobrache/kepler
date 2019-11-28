@@ -1269,6 +1269,7 @@ impl<'a> Extension<'a> {
 		let genesis = self.get_header_by_height(0)?;
 		let (utxo_sum, kernel_sum) = self.verify_kernel_sums(
 			self.header.total_overage(genesis.kernel_mmr_size > 0),
+			None, // TODO if sum all asset action
 			self.header.total_kernel_offset(),
 		)?;
 

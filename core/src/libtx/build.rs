@@ -32,7 +32,7 @@ use crate::core::issued_asset::AssetAction;
 use crate::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
 use crate::keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
 use crate::libtx::proof::{self, ProofBuild};
-use crate::libtx::{aggsig, Error};
+use crate::libtx::{aggsig, reward, Error};
 
 /// Context information available to transaction combinators.
 pub struct Context<'a, K, B>
@@ -150,14 +150,15 @@ where
 	)
 }
 
-pub fn asset<K, B>(asset_action: AssetAction) -> Box<Append<K, B>>
+/// Mint an asset, and add output for that supply
+pub fn mint<K, B>(action: AssetAction) -> Box<Append<K, B>>
 where
 	K: Keychain,
 	B: ProofBuild,
 {
 	Box::new(
 		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-			(tx.with_asset(asset_action), kern, sum)
+			(tx.with_asset(action), kern, sum)
 		},
 	)
 }
@@ -342,7 +343,7 @@ mod test {
 				input(Asset::default(), 10, key_id1),
 				input(Asset::default(), 12, key_id2),
 				output(Asset::default(), 20, key_id3),
-				asset(AssetAction::None),
+				// asset(AssetAction::None),
 				with_fee(2),
 			],
 			&keychain,

@@ -462,13 +462,14 @@ fn verify_block_sums(b: &Block, ext: &mut txhashset::Extension<'_>) -> Result<()
 	// Overage is based purely on the new block.
 	// Previous block_sums have taken all previous overage into account.
 	let overage = b.header.overage();
+	let mint_overage = Some(b.mint_overage()?); // TODO Check
 
 	// Offset on the other hand is the total kernel offset from the new block.
 	let offset = b.header.total_kernel_offset();
 
 	// Verify the kernel sums for the block_sums with the new block applied.
 	let (utxo_sum, kernel_sum) =
-		(block_sums, b as &dyn Committed).verify_kernel_sums(overage, offset)?;
+		(block_sums, b as &dyn Committed).verify_kernel_sums(overage, mint_overage, offset)?;
 
 	// Save the new block_sums for the new block to the db via the batch.
 	ext.batch.save_block_sums(
