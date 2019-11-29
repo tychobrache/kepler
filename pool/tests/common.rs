@@ -27,13 +27,13 @@ use self::util::secp::pedersen::Commitment;
 use self::util::RwLock;
 use kepler_chain as chain;
 use kepler_core as core;
+use kepler_core::core::asset::Asset;
 use kepler_keychain as keychain;
 use kepler_pool as pool;
 use kepler_util as util;
 use std::collections::HashSet;
 use std::fs;
 use std::sync::Arc;
-use kepler_core::core::asset::Asset;
 
 #[derive(Clone)]
 pub struct ChainAdapter {
@@ -77,7 +77,7 @@ impl ChainAdapter {
 
 		// Verify the kernel sums for the block_sums with the new block applied.
 		let (utxo_sum, kernel_sum) = (prev_sums, block as &dyn Committed)
-			.verify_kernel_sums(overage, None,offset)
+			.verify_kernel_sums(overage, None, offset)
 			.unwrap();
 
 		let block_sums = BlockSums {
