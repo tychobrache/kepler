@@ -33,6 +33,7 @@ use kepler_util as util;
 use std::collections::HashSet;
 use std::fs;
 use std::sync::Arc;
+use kepler_core::core::asset::Asset;
 
 #[derive(Clone)]
 pub struct ChainAdapter {
@@ -76,7 +77,7 @@ impl ChainAdapter {
 
 		// Verify the kernel sums for the block_sums with the new block applied.
 		let (utxo_sum, kernel_sum) = (prev_sums, block as &dyn Committed)
-			.verify_kernel_sums(overage, offset)
+			.verify_kernel_sums(overage, None,offset)
 			.unwrap();
 
 		let block_sums = BlockSums {
@@ -190,7 +191,7 @@ where
 
 	for output_value in output_values {
 		let key_id = ExtKeychain::derive_key_id(1, output_value as u32, 0, 0, 0);
-		tx_elements.push(libtx::build::output(output_value, key_id));
+		tx_elements.push(libtx::build::output(Asset::default(), output_value, key_id));
 	}
 
 	tx_elements.push(libtx::build::with_fee(fees as u64));
@@ -216,12 +217,12 @@ where
 
 	for input_value in input_values {
 		let key_id = ExtKeychain::derive_key_id(1, input_value as u32, 0, 0, 0);
-		tx_elements.push(libtx::build::input(input_value, key_id));
+		tx_elements.push(libtx::build::input(Asset::default(), input_value, key_id));
 	}
 
 	for output_value in output_values {
 		let key_id = ExtKeychain::derive_key_id(1, output_value as u32, 0, 0, 0);
-		tx_elements.push(libtx::build::output(output_value, key_id));
+		tx_elements.push(libtx::build::output(Asset::default(), output_value, key_id));
 	}
 	tx_elements.push(libtx::build::with_fee(fees as u64));
 
