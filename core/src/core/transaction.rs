@@ -1589,7 +1589,7 @@ impl OutputIdentifier {
 }
 
 impl FixedLength for OutputIdentifier {
-	const LEN: usize = 1 + secp::constants::PEDERSEN_COMMITMENT_SIZE;
+	const LEN: usize = 1 + secp::constants::PEDERSEN_COMMITMENT_SIZE + 64;
 }
 
 impl Writeable for OutputIdentifier {

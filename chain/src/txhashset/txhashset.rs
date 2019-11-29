@@ -1267,6 +1267,7 @@ impl<'a> Extension<'a> {
 		let now = Instant::now();
 
 		let genesis = self.get_header_by_height(0)?;
+
 		let (utxo_sum, kernel_sum) = self.verify_kernel_sums(
 			self.header.total_overage(genesis.kernel_mmr_size > 0),
 			None, // TODO if sum all asset action
@@ -1289,7 +1290,9 @@ impl<'a> Extension<'a> {
 		status: &dyn TxHashsetWriteStatus,
 	) -> Result<((Commitment, Commitment)), Error> {
 		self.validate_mmrs()?;
+
 		self.validate_roots()?;
+
 		self.validate_sizes()?;
 
 		if self.header.height == 0 {
@@ -1309,7 +1312,6 @@ impl<'a> Extension<'a> {
 			// Verify all the kernel signatures.
 			self.verify_kernel_signatures(status)?;
 		}
-
 		Ok((output_sum, kernel_sum))
 	}
 
@@ -1427,17 +1429,15 @@ impl<'a> Extension<'a> {
 		for pos in self.output_pmmr.leaf_pos_iter() {
 			let output = self.output_pmmr.get_data(pos);
 			let proof = self.rproof_pmmr.get_data(pos);
-			let asset = self.asset_pmmr.get_data(pos);
 
 			// Output and corresponding rangeproof *must* exist.
 			// It is invalid for either to be missing and we fail immediately in this case.
-			match (output, proof, asset) {
-				(None, _, _) => return Err(ErrorKind::OutputNotFound.into()),
-				(_, None, _) => return Err(ErrorKind::RangeproofNotFound.into()),
-				(_, _, None) => return Err(ErrorKind::OutputNotFound.into()),
-				(Some(output), Some(proof), Some(asset)) => {
+			match (output, proof) {
+				(None, _) => return Err(ErrorKind::OutputNotFound.into()),
+				(_, None) => return Err(ErrorKind::RangeproofNotFound.into()),
+				(Some(output), Some(proof)) => {
 					all_commits
-						.entry(asset)
+						.entry(output.asset)
 						.and_modify(|cr| {
 							cr.0.push(output.commit);
 							cr.1.push(proof);
