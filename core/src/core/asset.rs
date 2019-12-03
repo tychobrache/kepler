@@ -27,6 +27,26 @@ impl Asset {
 	pub fn to_bytes(&self) -> &[u8] {
 		&self.0
 	}
+
+	pub fn to_hex(&self) -> String {
+		let mut hex = String::new();
+		hex.extend(self.0.iter().map(|byte| format!("{:02x?}", byte)));
+		hex
+	}
+
+	pub fn from_hex(string: String) -> Result<Self, ()> {
+		if string.len() != 128 {
+			return Err(());
+		}
+
+		let mut value: [u8; 64] = [0; 64];
+
+		for i in 0..(string.len() / 2) {
+			let res = u8::from_str_radix(&string[2 * i..2 * i + 2], 16).unwrap();
+			value[i] = res;
+		}
+		Ok(Asset(value))
+	}
 }
 
 impl Default for Asset {

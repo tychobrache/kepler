@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::chain;
+use crate::core::core::asset::Asset;
 use crate::core::core::{OutputFeatures, OutputIdentifier};
 use crate::rest::*;
 use crate::types::*;
@@ -34,19 +35,31 @@ pub fn get_output(
 	chain: &Weak<chain::Chain>,
 	id: &str,
 ) -> Result<(Output, OutputIdentifier), Error> {
-	let c = util::from_hex(String::from(id)).context(ErrorKind::Argument(format!(
-		"Not a valid commitment: {}",
-		id
-	)))?;
-	let commit = Commitment::from_vec(c);
+	let (commit, asset) = if id.len() == 66 + 128 {
+		let c = util::from_hex(String::from(&id[0..66])).context(ErrorKind::Argument(format!(
+			"Not a valid commitment: {}",
+			id
+		)))?;
+		let asset = Asset::from_hex(String::from(&id[66..]))
+			.map_err(|_| ErrorKind::Argument(format!("Not a valid asset: {}", id)))?;
+
+		(Commitment::from_vec(c), asset)
+	} else {
+		let c = util::from_hex(String::from(id)).context(ErrorKind::Argument(format!(
+			"Not a valid commitment: {}",
+			id
+		)))?;
+
+		(Commitment::from_vec(c), Default::default())
+	};
 
 	// We need the features here to be able to generate the necessary hash
 	// to compare against the hash in the output MMR.
 	// For now we can just try both (but this probably needs to be part of the api
 	// params)
 	let outputs = [
-		OutputIdentifier::new(OutputFeatures::Plain, &commit, Default::default()),
-		OutputIdentifier::new(OutputFeatures::Coinbase, &commit, Default::default()),
+		OutputIdentifier::new(OutputFeatures::Plain, &commit, asset),
+		OutputIdentifier::new(OutputFeatures::Coinbase, &commit, asset),
 	];
 
 	let chain = w(chain)?;
