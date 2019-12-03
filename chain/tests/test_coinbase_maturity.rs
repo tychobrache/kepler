@@ -37,6 +37,7 @@ fn clean_output_dir(dir_name: &str) {
 #[test]
 fn test_coinbase_maturity() {
 	let _ = env_logger::init();
+
 	let chain_dir = ".kepler_coinbase";
 	clean_output_dir(chain_dir);
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
