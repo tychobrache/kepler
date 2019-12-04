@@ -631,6 +631,7 @@ impl TransactionBody {
 				.map_err(|_| Error::AggregationError)?,
 			);
 		}
+
 		if commitments.len() == 0 {
 			return Ok(None);
 		}

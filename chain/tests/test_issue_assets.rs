@@ -32,7 +32,12 @@ use kepler_util as util;
 use std::fs;
 use std::sync::Arc;
 use kepler_core::core::asset::Asset;
-use kepler_core::core::issued_asset::AssetAction;
+use kepler_core::core::issued_asset::{AssetAction, IssuedAsset};
+use rand::thread_rng;
+
+use crate::util::static_secp_instance;
+use crate::util::secp::key::{PublicKey, SecretKey};
+use crate::util::secp::{Message, Signature};
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -248,7 +253,7 @@ impl<'a> Harness<'a> {
 	}
 
 	// -> (Block, Identifier)
-	fn issue_asset(&mut self) -> Result<(), Error> {
+	fn issue_asset(&mut self) -> Result<(Block, Identifier), Error> {
 		let btc_asset: Asset = "btc".into();
 
 		let (_, output) = self.mine_plain_output()?;
@@ -259,11 +264,27 @@ impl<'a> Harness<'a> {
 
 		let asset_output_key_id = self.next_key_id();
 
+		let new_assest_action = {
+			let secp = static_secp_instance();
+			let secp = secp.lock(); // drop the static lock after using
+
+			let sk = SecretKey::new(&secp, &mut thread_rng());
+//			let sk = SecretKey::from_slice(&secp, &[1; 32]).unwrap();
+			let pubkey =  PublicKey::from_secret_key(&secp, &sk).unwrap();
+
+			let issue_asset = IssuedAsset::new(100, pubkey, false, btc_asset);
+
+			let message = Message::from_bytes(&issue_asset.to_bytes()).unwrap();
+			let sig = secp.sign(&message, &sk).unwrap();
+
+			AssetAction::New(btc_asset, issue_asset, sig)
+		};
+
 		let tx = build::transaction(
 			vec![
 				build::input(Asset::default(), amount, output),
 				build::output(Asset::default(), amount - fee, change_key_id),
-				build::mint(AssetAction::Issue(btc_asset, 100, Default::default())),
+				build::mint(new_assest_action),
 				build::output(btc_asset, 100, asset_output_key_id.clone()),
 				build::with_fee(fee),
 			],
@@ -272,23 +293,18 @@ impl<'a> Harness<'a> {
 		)
 			.unwrap();
 
-		match self.chain.validate_tx(&tx) {
-			Err(err) => {
-				panic!("cannot validate issue tx: {}", err);
-			}
-			Ok(_) => {}
-		};
+		self.chain.validate_tx(&tx)?;
 
-		Ok(())
+		let (block, _) = self.mine_block(vec![tx])?;
 
-//		let (block, _) = self.mine_block(vec![tx]);
-//
-//		(block, asset_output_key_id)
+		Ok((block, asset_output_key_id))
 	}
 }
 
 #[test]
 fn test_issue_asset() -> Result<(), Error> {
+	global::set_test_block_max_weight(350);
+
 	let chain_dir = ".kepler_test_issue_asset";
 
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
@@ -298,7 +314,6 @@ fn test_issue_asset() -> Result<(), Error> {
 
 	Ok(())
 
-//	block.header
 }
 
 #[test]

@@ -5,7 +5,7 @@ use std::hash::{Hash, Hasher};
 
 use crate::core::hash::DefaultHashable;
 use crate::ser::{self, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
-use crate::util::secp::{key::PublicKey, ContextFlag, Message, Secp256k1, Signature};
+use crate::util::secp::{key::{PublicKey,SecretKey}, ContextFlag, Message, Secp256k1, Signature};
 
 use super::asset::Asset;
 
@@ -25,6 +25,7 @@ impl AssetAction {
 			AssetAction::Withdraw(_, num, sign) => (bincode::serialize(&num).unwrap(), sign),
 			AssetAction::ChangeOwner(_, pk, sign) => (bincode::serialize(&pk).unwrap(), sign),
 		};
+
 		let message = &Message::from_bytes(&bytes).unwrap();
 		let secp = Secp256k1::with_caps(ContextFlag::VerifyOnly);
 		secp.verify(&message, &sign, pk).is_ok()
@@ -94,6 +95,10 @@ impl IssuedAsset {
 			mintable,
 			asset,
 		}
+	}
+
+	pub fn to_bytes(&self) -> Vec<u8> {
+		bincode::serialize(self).unwrap()
 	}
 
 	pub fn change_owner_message(&self, new_pk: PublicKey) -> Message {

@@ -66,7 +66,7 @@ pub const TESTING_INITIAL_GRAPH_WEIGHT: u32 = 1;
 pub const TESTING_INITIAL_DIFFICULTY: u64 = 1;
 
 /// Testing max_block_weight (artifically low, just enough to support a few txs).
-pub const TESTING_MAX_BLOCK_WEIGHT: usize = 150; // CHANG it TO USE ASSET ACTION
+// pub const TESTING_MAX_BLOCK_WEIGHT: usize = 150;
 
 /// If a peer's last updated difficulty is 2 hours ago and its difficulty's lower than ours,
 /// we're sure this peer is a stuck node, and we will kick out such kind of stuck peers.
@@ -136,12 +136,20 @@ lazy_static! {
 	/// PoW context type to instantiate
 	pub static ref POW_CONTEXT_TYPE: RwLock<PoWContextTypes> =
 			RwLock::new(PoWContextTypes::Cuckoo);
+
+	/// Testing max_block_weight (artifically low, just enough to support a few txs).
+	pub static ref TESTING_MAX_BLOCK_WEIGHT: RwLock<usize> = RwLock::new(150);
 }
 
 /// Set the mining mode
 pub fn set_mining_mode(mode: ChainTypes) {
 	let mut param_ref = CHAIN_TYPE.write();
 	*param_ref = mode;
+}
+
+pub fn set_test_block_max_weight(weight: usize) {
+	let mut max_weight_ref = TESTING_MAX_BLOCK_WEIGHT.write();
+	*max_weight_ref = weight;
 }
 
 /// Return either a cuckoo context or a cuckatoo context
@@ -240,7 +248,10 @@ pub fn initial_graph_weight() -> u32 {
 pub fn max_block_weight() -> usize {
 	let param_ref = CHAIN_TYPE.read();
 	match *param_ref {
-		ChainTypes::AutomatedTesting => TESTING_MAX_BLOCK_WEIGHT,
+		ChainTypes::AutomatedTesting => {
+			let weight_ref = TESTING_MAX_BLOCK_WEIGHT.read();
+			*weight_ref
+		},
 		ChainTypes::UserTesting => MAX_BLOCK_WEIGHT,
 		ChainTypes::Floonet => MAX_BLOCK_WEIGHT,
 		ChainTypes::Mainnet => MAX_BLOCK_WEIGHT,
