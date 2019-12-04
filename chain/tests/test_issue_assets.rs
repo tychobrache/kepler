@@ -26,11 +26,13 @@ use chrono::Duration;
 use env_logger;
 use kepler_chain as chain;
 use kepler_core as core;
-use kepler_core::core::{Block, Transaction, Committed, OutputIdentifier};
+use kepler_core::core::{Block, Committed, OutputIdentifier, Transaction};
 use kepler_keychain as keychain;
 use kepler_util as util;
 use std::fs;
 use std::sync::Arc;
+use kepler_core::core::asset::Asset;
+use kepler_core::core::issued_asset::AssetAction;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -49,13 +51,10 @@ struct Harness<'a> {
 
 impl<'a> Harness<'a> {
 	fn setup(chain_dir: &str, keychain: &'a ExtKeychain) -> Harness<'a> {
-//		let _ = env_logger::init();
 		match env_logger::try_init() {
 			Ok(_) => println!("Initializing env logger"),
-			_ => {}
-//			Err(e) => println!("env logger already initialized: {:?}", e),
+			_ => {} //			Err(e) => println!("env logger already initialized: {:?}", e),
 		};
-
 
 		clean_output_dir(chain_dir);
 		global::set_mining_mode(ChainTypes::AutomatedTesting);
@@ -83,7 +82,7 @@ impl<'a> Harness<'a> {
 		}
 	}
 
-	fn build_block(&mut self, txs: Vec<Transaction>, reward_output_key_id: Identifier) -> Block {
+	fn build_block(&mut self, txs: Vec<Transaction>, reward_output_key_id: Identifier) -> Result<Block, Error> {
 		let prev = self.chain.head_header().unwrap();
 		let fees = txs.iter().map(|tx| tx.fee()).sum();
 		let height = prev.height + 1;
@@ -96,8 +95,7 @@ impl<'a> Harness<'a> {
 			fees,
 			height,
 			false,
-		)
-		.unwrap();
+		).map_err(|err| ErrorKind::Other("error building reward output".to_string()))?;
 		let mut block = core::core::Block::new(&prev, txs, Difficulty::min(), reward).unwrap();
 		block.header.timestamp = prev.timestamp + Duration::seconds(60);
 		block.header.pow.secondary_scaling = next_header_info.secondary_scaling;
@@ -113,29 +111,28 @@ impl<'a> Harness<'a> {
 		)
 		.unwrap();
 
-		block
+		Ok(block)
 	}
 
-	fn mine_block(&mut self, txs: Vec<Transaction>) -> (Block, Identifier) {
+	fn mine_block(&mut self, txs: Vec<Transaction>) -> Result<(Block, Identifier), Error> {
 		let reward_output_key_id = self.next_key_id();
 
-		let block = self.build_block(txs, reward_output_key_id.clone());
+		let block = self.build_block(txs, reward_output_key_id.clone())?;
 
 		self.chain
-			.process_block(block.clone(), chain::Options::MINE)
-			.unwrap();
+			.process_block(block.clone(), chain::Options::MINE)?;
 
-		(block, reward_output_key_id)
+		Ok((block, reward_output_key_id))
 	}
 
-	fn mine_empty_block(&mut self) -> (Block, Identifier) {
-		let (block, key_id) = self.mine_block(vec![]);
+	fn mine_empty_block(&mut self) -> Result<(Block, Identifier), Error> {
+		let (block, key_id) = self.mine_block(vec![])?;
 
 		assert_eq!(block.outputs().len(), 1);
 		let coinbase_output = block.outputs()[0];
 		assert!(coinbase_output.is_coinbase());
 
-		(block, key_id)
+		Ok((block, key_id))
 	}
 
 	fn next_key_id(&mut self) -> Identifier {
@@ -171,7 +168,10 @@ impl<'a> Harness<'a> {
 		(coinbase_txn, plain_output_keyid)
 	}
 
-	fn build_spend_plain_output_tx(&mut self, plain_utxo_keyid: Identifier) -> (Transaction, Identifier) {
+	fn build_spend_plain_output_tx(
+		&mut self,
+		plain_utxo_keyid: Identifier,
+	) -> (Transaction, Identifier) {
 		let output_keyid = self.next_key_id();
 
 		// kinda ugly... we expect the plain output to be 2 less than the coinbase input.
@@ -188,16 +188,17 @@ impl<'a> Harness<'a> {
 			self.keychain,
 			&self.builder,
 		)
-			.unwrap();
+		.unwrap();
 
 		(tx, output_keyid)
 	}
 
 	// Converting a mature coinbase input to a plain output
-	fn spend_coinbase(&mut self, coinbase_input: Identifier) -> (Block, Identifier) {
-		let (spend_coinbase_tx, plain_output_keyid) = self.build_spend_coinbase_tx(coinbase_input.clone());
-		let (block, _) = self.mine_block(vec![spend_coinbase_tx]);
-		(block, plain_output_keyid)
+	fn spend_coinbase(&mut self, coinbase_input: Identifier) -> Result<(Block, Identifier), Error> {
+		let (spend_coinbase_tx, plain_output_keyid) =
+			self.build_spend_coinbase_tx(coinbase_input.clone());
+		let (block, _) = self.mine_block(vec![spend_coinbase_tx])?;
+		Ok((block, plain_output_keyid))
 	}
 
 	fn verify_coinbase_maturity(&mut self, coinbase_input: Identifier) -> Result<(), Error> {
@@ -236,31 +237,81 @@ impl<'a> Harness<'a> {
 	}
 
 	// Mine a plain input, by spending a matured coinbase
-	fn mine_plain_output(&mut self) -> (Block, Identifier) {
-		let (_, reward) = self.mine_empty_block();
+	fn mine_plain_output(&mut self) -> Result<(Block, Identifier), Error> {
+		let (_, reward) = self.mine_empty_block()?;
 
 		for _ in 0..3 {
 			self.mine_empty_block();
 		}
 
-		let (block, output_keyid) = self.spend_coinbase(reward);
+		self.spend_coinbase(reward)
+	}
 
+	// -> (Block, Identifier)
+	fn issue_asset(&mut self) -> Result<(), Error> {
+		let btc_asset: Asset = "btc".into();
 
-		(block, output_keyid)
+		let (_, output) = self.mine_plain_output()?;
+		let amount = self.reward_amount() - 2;
+		let fee = 2;
+
+		let change_key_id = self.next_key_id();
+
+		let asset_output_key_id = self.next_key_id();
+
+		let tx = build::transaction(
+			vec![
+				build::input(Asset::default(), amount, output),
+				build::output(Asset::default(), amount - fee, change_key_id),
+				build::mint(AssetAction::Issue(btc_asset, 100, Default::default())),
+				build::output(btc_asset, 100, asset_output_key_id.clone()),
+				build::with_fee(fee),
+			],
+			self.keychain,
+			&self.builder,
+		)
+			.unwrap();
+
+		match self.chain.validate_tx(&tx) {
+			Err(err) => {
+				panic!("cannot validate issue tx: {}", err);
+			}
+			Ok(_) => {}
+		};
+
+		Ok(())
+
+//		let (block, _) = self.mine_block(vec![tx]);
+//
+//		(block, asset_output_key_id)
 	}
 }
 
 #[test]
-fn test_plain_output_spendable() {
+fn test_issue_asset() -> Result<(), Error> {
+	let chain_dir = ".kepler_test_issue_asset";
+
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
+	let mut h = Harness::setup(chain_dir, &keychain);
+
+	h.issue_asset()?;
+
+	Ok(())
+
+//	block.header
+}
+
+#[test]
+fn test_plain_output_spendable() -> Result<(), Error> {
 	let chain_dir = ".kepler_test_plain_output_spendable";
 
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let mut h = Harness::setup(chain_dir, &keychain);
 
-	let (block, output) = h.mine_plain_output();
+	let (block, output) = h.mine_plain_output()?;
 
 	match h.chain.is_unspent(&block.outputs()[1].into()) {
-		Ok(_) => {},
+		Ok(_) => {}
 		Err(err) => {
 			panic!("output is not found (or already spent): {}", err);
 		}
@@ -271,13 +322,15 @@ fn test_plain_output_spendable() {
 	match h.chain.validate_tx(&tx) {
 		Err(err) => {
 			panic!("cannot validate spending tx: {}", err);
-		},
-		Ok(_) => {},
+		}
+		Ok(_) => {}
 	};
+
+	Ok(())
 }
 
 #[test]
-fn test_issue_assets() {
+fn test_coin_maturity() -> Result<(), Error> {
 	let chain_dir = ".kepler_test_issue_assets";
 
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
@@ -287,13 +340,13 @@ fn test_issue_assets() {
 	assert_eq!(lock_height, 4);
 
 	{
-		let (_, reward) = h.mine_empty_block();
+		let (_, reward) = h.mine_empty_block()?;
 		h.expect_immature_coinbase(reward.clone());
 	}
 
 	// Do the same test 3 times, and spending the coinbase after mining 3 blocks to mature it.
 	for _ in 0..3 {
-		let (_, reward) = h.mine_empty_block();
+		let (_, reward) = h.mine_empty_block()?;
 
 		h.expect_immature_coinbase(reward.clone());
 
@@ -303,9 +356,11 @@ fn test_issue_assets() {
 
 		h.expect_mature_coinbase(reward.clone());
 
-		h.spend_coinbase(reward.clone());
+		h.spend_coinbase(reward.clone())?;
 	}
 
 	// Cleanup chain directory
 	clean_output_dir(chain_dir);
+
+	Ok(())
 }
