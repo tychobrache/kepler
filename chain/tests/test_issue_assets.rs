@@ -26,18 +26,18 @@ use chrono::Duration;
 use env_logger;
 use kepler_chain as chain;
 use kepler_core as core;
+use kepler_core::core::asset::Asset;
+use kepler_core::core::issued_asset::{AssetAction, IssuedAsset};
 use kepler_core::core::{Block, Committed, OutputIdentifier, Transaction};
 use kepler_keychain as keychain;
 use kepler_util as util;
+use rand::thread_rng;
 use std::fs;
 use std::sync::Arc;
-use kepler_core::core::asset::Asset;
-use kepler_core::core::issued_asset::{AssetAction, IssuedAsset};
-use rand::thread_rng;
 
-use crate::util::static_secp_instance;
 use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::{Message, Signature};
+use crate::util::static_secp_instance;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -87,7 +87,11 @@ impl<'a> Harness<'a> {
 		}
 	}
 
-	fn build_block(&mut self, txs: Vec<Transaction>, reward_output_key_id: Identifier) -> Result<Block, Error> {
+	fn build_block(
+		&mut self,
+		txs: Vec<Transaction>,
+		reward_output_key_id: Identifier,
+	) -> Result<Block, Error> {
 		let prev = self.chain.head_header().unwrap();
 		let fees = txs.iter().map(|tx| tx.fee()).sum();
 		let height = prev.height + 1;
@@ -100,7 +104,8 @@ impl<'a> Harness<'a> {
 			fees,
 			height,
 			false,
-		).map_err(|err| ErrorKind::Other("error building reward output".to_string()))?;
+		)
+		.map_err(|err| ErrorKind::Other("error building reward output".to_string()))?;
 		let mut block = core::core::Block::new(&prev, txs, Difficulty::min(), reward).unwrap();
 		block.header.timestamp = prev.timestamp + Duration::seconds(60);
 		block.header.pow.secondary_scaling = next_header_info.secondary_scaling;
@@ -266,11 +271,11 @@ impl<'a> Harness<'a> {
 
 		let new_assest_action = {
 			let secp = static_secp_instance();
-			let secp = secp.lock(); // drop the static lock after using
+			let secp = secp.lock(); // drop the static lock after using. The same static secp instance is used later in the scope by another function.
 
 			let sk = SecretKey::new(&secp, &mut thread_rng());
-//			let sk = SecretKey::from_slice(&secp, &[1; 32]).unwrap();
-			let pubkey =  PublicKey::from_secret_key(&secp, &sk).unwrap();
+			//			let sk = SecretKey::from_slice(&secp, &[1; 32]).unwrap();
+			let pubkey = PublicKey::from_secret_key(&secp, &sk).unwrap();
 
 			let issue_asset = IssuedAsset::new(100, pubkey, false, btc_asset);
 
@@ -291,7 +296,7 @@ impl<'a> Harness<'a> {
 			self.keychain,
 			&self.builder,
 		)
-			.unwrap();
+		.unwrap();
 
 		self.chain.validate_tx(&tx)?;
 
@@ -313,7 +318,6 @@ fn test_issue_asset() -> Result<(), Error> {
 	h.issue_asset()?;
 
 	Ok(())
-
 }
 
 #[test]

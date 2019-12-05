@@ -439,9 +439,7 @@ fn validate_block(block: &Block, ctx: &mut BlockContext<'_>) -> Result<(), Error
 
 	block
 		.validate(&prev.total_kernel_offset, ctx.verifier_cache.clone())
-		.map_err(|e| {
-			ErrorKind::InvalidBlockProof(e)
-		})?;
+		.map_err(|e| ErrorKind::InvalidBlockProof(e))?;
 	Ok(())
 }
 

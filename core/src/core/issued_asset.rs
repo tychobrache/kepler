@@ -5,7 +5,10 @@ use std::hash::{Hash, Hasher};
 
 use crate::core::hash::DefaultHashable;
 use crate::ser::{self, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
-use crate::util::secp::{key::{PublicKey,SecretKey}, ContextFlag, Message, Secp256k1, Signature};
+use crate::util::secp::{
+	key::{PublicKey, SecretKey},
+	ContextFlag, Message, Secp256k1, Signature,
+};
 
 use super::asset::Asset;
 

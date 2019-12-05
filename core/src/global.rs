@@ -251,7 +251,7 @@ pub fn max_block_weight() -> usize {
 		ChainTypes::AutomatedTesting => {
 			let weight_ref = TESTING_MAX_BLOCK_WEIGHT.read();
 			*weight_ref
-		},
+		}
 		ChainTypes::UserTesting => MAX_BLOCK_WEIGHT,
 		ChainTypes::Floonet => MAX_BLOCK_WEIGHT,
 		ChainTypes::Mainnet => MAX_BLOCK_WEIGHT,
