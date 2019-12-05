@@ -28,7 +28,8 @@ use crate::core::compact_block::{CompactBlock, CompactBlockBody};
 use crate::core::hash::{DefaultHashable, Hash, Hashed, ZERO_HASH};
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{
-	transaction, Commitment, Input, Output, Transaction, TransactionBody, TxKernel, Weighting,
+	asset::Asset, transaction, Commitment, Input, Output, Transaction, TransactionBody, TxKernel,
+	Weighting,
 };
 use crate::global;
 use crate::keychain::{self, BlindingFactor};
@@ -37,6 +38,16 @@ use crate::ser::{self, FixedLength, PMMRable, Readable, Reader, Writeable, Write
 use crate::util::{secp, static_secp_instance};
 
 use super::issued_asset::AssetAction;
+
+lazy_static! {
+	/// The "zero" overage when no asset had been issued. This is loading 32 zero-bytes as generator.
+	/// [0u8;32]*G isn't the infinity/zero point.
+	pub static ref ZERO_OVERAGE_COMMITMENT: Commitment = {
+		let secp = static_secp_instance();
+		let secp = secp.lock();
+		secp.commit_value_with_generator(0, Asset::default().into()).unwrap()
+	};
+}
 
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, Eq, PartialEq, Fail)]
@@ -233,7 +244,7 @@ pub struct BlockHeader {
 	/// Merklish root of all transaction kernels in the TxHashSet
 	pub kernel_root: Hash,
 	/// Merklish root of all assets in the TxHashSet
-	pub asset_root: Hash,
+	pub issue_root: Hash,
 	/// Total accumulated sum of kernel offsets since genesis block.
 	/// We can derive the kernel offset sum for *this* block from
 	/// the total kernel offset of the previous block header.
@@ -242,6 +253,12 @@ pub struct BlockHeader {
 	pub output_mmr_size: u64,
 	/// Total size of the kernel MMR after applying this block
 	pub kernel_mmr_size: u64,
+
+	/// Total size of the issued assets MMR after applying this block
+	pub issue_mmr_size: u64,
+
+	pub total_issue_overage: Commitment,
+
 	/// Proof of work and related
 	pub pow: ProofOfWork,
 }
@@ -258,10 +275,12 @@ impl Default for BlockHeader {
 			output_root: ZERO_HASH,
 			range_proof_root: ZERO_HASH,
 			kernel_root: ZERO_HASH,
-			asset_root: ZERO_HASH,
+			issue_root: ZERO_HASH,
 			total_kernel_offset: BlindingFactor::zero(),
+			total_issue_overage: *ZERO_OVERAGE_COMMITMENT,
 			output_mmr_size: 0,
 			kernel_mmr_size: 0,
+			issue_mmr_size: 0,
 			pow: ProofOfWork::default(),
 		}
 	}
@@ -304,7 +323,9 @@ impl Readable for BlockHeader {
 		let kernel_root = Hash::read(reader)?;
 		let asset_root = Hash::read(reader)?;
 		let total_kernel_offset = BlindingFactor::read(reader)?;
-		let (output_mmr_size, kernel_mmr_size) = ser_multiread!(reader, read_u64, read_u64);
+		let (output_mmr_size, kernel_mmr_size, asset_mmr_size) =
+			ser_multiread!(reader, read_u64, read_u64, read_u64);
+		let total_issue_overage = Commitment::read(reader)?;
 		let pow = ProofOfWork::read(reader)?;
 
 		if timestamp > MAX_DATE.and_hms(0, 0, 0).timestamp()
@@ -330,10 +351,12 @@ impl Readable for BlockHeader {
 			output_root,
 			range_proof_root,
 			kernel_root,
-			asset_root,
+			issue_root: asset_root,
 			total_kernel_offset,
 			output_mmr_size,
 			kernel_mmr_size,
+			issue_mmr_size: asset_mmr_size,
+			total_issue_overage,
 			pow,
 		})
 	}
@@ -352,11 +375,13 @@ impl BlockHeader {
 			[write_fixed_bytes, &self.output_root],
 			[write_fixed_bytes, &self.range_proof_root],
 			[write_fixed_bytes, &self.kernel_root],
-			[write_fixed_bytes, &self.asset_root],
+			[write_fixed_bytes, &self.issue_root],
 			[write_fixed_bytes, &self.total_kernel_offset],
 			[write_u64, self.output_mmr_size],
-			[write_u64, self.kernel_mmr_size]
+			[write_u64, self.kernel_mmr_size],
+			[write_u64, self.issue_mmr_size]
 		);
+		self.total_issue_overage.write(writer)?;
 		Ok(())
 	}
 
@@ -745,7 +770,6 @@ impl Block {
 			mint_overage,
 			self.block_kernel_offset(prev_kernel_offset.clone())?,
 		)?;
-
 
 		Ok(kernel_sum)
 	}

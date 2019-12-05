@@ -108,7 +108,7 @@ pub struct TxHashSet {
 
 	output_pmmr_h: PMMRHandle<Output>,
 	rproof_pmmr_h: PMMRHandle<RangeProof>,
-	asset_pmmr_h: PMMRHandle<Asset>,
+
 	issue_pmmr_h: PMMRHandle<IssuedAsset>,
 	kernel_pmmr_h: PMMRHandle<TxKernel>,
 
@@ -156,19 +156,11 @@ impl TxHashSet {
 				true,
 				header,
 			)?,
-			asset_pmmr_h: PMMRHandle::new(
-				&root_dir,
-				TXHASHSET_SUBDIR,
-				ASSET_SUBDIR,
-				true,
-				true,
-				header,
-			)?,
 			issue_pmmr_h: PMMRHandle::new(
 				&root_dir,
 				TXHASHSET_SUBDIR,
 				ISSUE_SUBDIR,
-				true,
+				false,
 				true,
 				header,
 			)?,
@@ -294,12 +286,14 @@ impl TxHashSet {
 			ReadonlyPMMR::at(&self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
 		let kernel_pmmr =
 			ReadonlyPMMR::at(&self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
+		let issue_pmmr = ReadonlyPMMR::at(&self.issue_pmmr_h.backend, self.issue_pmmr_h.last_pos);
 
 		TxHashSetRoots {
 			header_root: header_pmmr.root(),
 			output_root: output_pmmr.root(),
 			rproof_root: rproof_pmmr.root(),
 			kernel_root: kernel_pmmr.root(),
+			issue_root: issue_pmmr.root(),
 		}
 	}
 
@@ -448,7 +442,7 @@ pub fn extending<'a, F, T>(
 where
 	F: FnOnce(&mut Extension<'_>) -> Result<T, Error>,
 {
-	let sizes: (u64, u64, u64, u64);
+	let sizes: (u64, u64, u64, u64, u64);
 	let res: Result<T, Error>;
 	let rollback: bool;
 
@@ -478,6 +472,7 @@ where
 			trees.output_pmmr_h.backend.discard();
 			trees.rproof_pmmr_h.backend.discard();
 			trees.kernel_pmmr_h.backend.discard();
+			trees.issue_pmmr_h.backend.discard();
 			Err(e)
 		}
 		Ok(r) => {
@@ -487,6 +482,7 @@ where
 				trees.output_pmmr_h.backend.discard();
 				trees.rproof_pmmr_h.backend.discard();
 				trees.kernel_pmmr_h.backend.discard();
+				trees.issue_pmmr_h.backend.discard();
 			} else {
 				trace!("Committing txhashset extension. sizes {:?}", sizes);
 				child_batch.commit()?;
@@ -494,10 +490,12 @@ where
 				trees.output_pmmr_h.backend.sync()?;
 				trees.rproof_pmmr_h.backend.sync()?;
 				trees.kernel_pmmr_h.backend.sync()?;
+
 				trees.header_pmmr_h.last_pos = sizes.0;
 				trees.output_pmmr_h.last_pos = sizes.1;
 				trees.rproof_pmmr_h.last_pos = sizes.2;
 				trees.kernel_pmmr_h.last_pos = sizes.3;
+				trees.issue_pmmr_h.last_pos = sizes.4;
 			}
 
 			trace!("TxHashSet extension done.");
@@ -805,7 +803,6 @@ pub struct Extension<'a> {
 	header_pmmr: PMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
 	output_pmmr: PMMR<'a, Output, PMMRBackend<Output>>,
 	rproof_pmmr: PMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
-	asset_pmmr: PMMR<'a, Asset, PMMRBackend<Asset>>,
 	issue_pmmr: PMMR<'a, IssuedAsset, PMMRBackend<IssuedAsset>>,
 	kernel_pmmr: PMMR<'a, TxKernel, PMMRBackend<TxKernel>>,
 
@@ -862,7 +859,6 @@ impl<'a> Extension<'a> {
 				&mut trees.rproof_pmmr_h.backend,
 				trees.rproof_pmmr_h.last_pos,
 			),
-			asset_pmmr: PMMR::at(&mut trees.asset_pmmr_h.backend, trees.asset_pmmr_h.last_pos),
 			issue_pmmr: PMMR::at(&mut trees.issue_pmmr_h.backend, trees.issue_pmmr_h.last_pos),
 			kernel_pmmr: PMMR::at(
 				&mut trees.kernel_pmmr_h.backend,
@@ -1154,6 +1150,7 @@ impl<'a> Extension<'a> {
 			output_root: self.output_pmmr.root(),
 			rproof_root: self.rproof_pmmr.root(),
 			kernel_root: self.kernel_pmmr.root(),
+			issue_root: self.issue_pmmr.root(),
 		}
 	}
 
@@ -1214,7 +1211,8 @@ impl<'a> Extension<'a> {
 			return Ok(());
 		}
 
-		let (header_mmr_size, output_mmr_size, rproof_mmr_size, kernel_mmr_size) = self.sizes();
+		let (header_mmr_size, output_mmr_size, rproof_mmr_size, kernel_mmr_size, issue_mmr_size) =
+			self.sizes();
 		let expected_header_mmr_size = pmmr::insertion_to_pmmr_index(self.header.height + 2) - 1;
 
 		if header_mmr_size != expected_header_mmr_size {
@@ -1224,6 +1222,8 @@ impl<'a> Extension<'a> {
 		} else if kernel_mmr_size != self.header.kernel_mmr_size {
 			Err(ErrorKind::InvalidMMRSize.into())
 		} else if output_mmr_size != rproof_mmr_size {
+			Err(ErrorKind::InvalidMMRSize.into())
+		} else if issue_mmr_size != self.header.issue_mmr_size {
 			Err(ErrorKind::InvalidMMRSize.into())
 		} else {
 			Ok(())
@@ -1377,12 +1377,13 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Sizes of each of the sum trees
-	pub fn sizes(&self) -> (u64, u64, u64, u64) {
+	pub fn sizes(&self) -> (u64, u64, u64, u64, u64) {
 		(
 			self.header_pmmr.unpruned_size(),
 			self.output_pmmr.unpruned_size(),
 			self.rproof_pmmr.unpruned_size(),
 			self.kernel_pmmr.unpruned_size(),
+			self.issue_pmmr.unpruned_size(),
 		)
 	}
 

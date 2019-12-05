@@ -28,7 +28,7 @@ use kepler_chain as chain;
 use kepler_core as core;
 use kepler_core::core::asset::Asset;
 use kepler_core::core::issued_asset::{AssetAction, IssuedAsset};
-use kepler_core::core::{Block, Committed, OutputIdentifier, Transaction};
+use kepler_core::core::{Block, Committed, OutputIdentifier, Transaction, ZERO_OVERAGE_COMMITMENT};
 use kepler_keychain as keychain;
 use kepler_util as util;
 use rand::thread_rng;
@@ -38,6 +38,7 @@ use std::sync::Arc;
 use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::{Message, Signature};
 use crate::util::static_secp_instance;
+use kepler_core::core::hash::ZERO_HASH;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -48,14 +49,21 @@ fn clean_output_dir(dir_name: &str) {
 // 3. check block headers for correctness
 
 struct Harness<'a> {
+	dir: &'a str,
 	chain: Chain,
 	keychain: &'a ExtKeychain,
 	builder: ProofBuilder<'a, ExtKeychain>,
 	d0: u32,
 }
 
+impl<'a> Drop for Harness<'a> {
+	fn drop(&mut self) {
+		clean_output_dir(self.dir);
+	}
+}
+
 impl<'a> Harness<'a> {
-	fn setup(chain_dir: &str, keychain: &'a ExtKeychain) -> Harness<'a> {
+	fn setup(chain_dir: &'a str, keychain: &'a ExtKeychain) -> Harness<'a> {
 		match env_logger::try_init() {
 			Ok(_) => println!("Initializing env logger"),
 			_ => {} //			Err(e) => println!("env logger already initialized: {:?}", e),
@@ -80,6 +88,7 @@ impl<'a> Harness<'a> {
 		let builder = ProofBuilder::new(keychain);
 
 		Harness {
+			dir: chain_dir,
 			chain,
 			keychain,
 			builder,
@@ -306,6 +315,35 @@ impl<'a> Harness<'a> {
 	}
 }
 
+//#[test]
+//fn test_add_zero_commit() -> Result<(), Error> {
+//	let secp = static_secp_instance();
+//	let secp = secp.lock();
+//
+//	let zero = secp.commit_value_with_generator(0, Asset::default().into())?;
+//
+//	println!("zero: {:?}", zero);
+////	let zerozero = secp.commit_sum(vec![zero, zero], vec![zero])?;
+//
+//	let btc: Asset = "btc".into();
+//	let sk = SecretKey::new(&secp, &mut thread_rng());
+//	let v = secp.commit_with_generator(10, sk, btc.into())?;
+//
+//	let sum = secp.commit_sum(vec![zero, v], vec![])?;
+//	println!("zero + v: {:?}", sum);
+//
+////	sum.clone();
+//
+//	// the "zero commitment" is loading 32 zero-bytes as generator. [0u8;32]*G isn't infinity.
+//	println!("zero == zero + zero: {}", secp.verify_commit_sum(vec![zero, zero], vec![zero]));
+//
+//	// but summing works as expected. so it's probably ok to just start from zero...
+//	println!("verify sum: {}", secp.verify_commit_sum(vec![zero, v], vec![sum]));
+//
+//
+//	Ok(())
+//}
+
 #[test]
 fn test_issue_asset() -> Result<(), Error> {
 	global::set_test_block_max_weight(350);
@@ -315,7 +353,20 @@ fn test_issue_asset() -> Result<(), Error> {
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let mut h = Harness::setup(chain_dir, &keychain);
 
-	h.issue_asset()?;
+	let (block, _) = h.issue_asset()?;
+
+	let expected_overage = {
+		let overage = block.mint_overage()?.unwrap();
+
+		let secp = static_secp_instance();
+		let secp = secp.lock();
+		let new_overage = secp.commit_sum(vec![*ZERO_OVERAGE_COMMITMENT, overage], vec![])?;
+		new_overage
+	};
+
+	assert_eq!(block.header.issue_mmr_size, 1);
+	assert_eq!(block.header.total_issue_overage, expected_overage);
+	assert_ne!(block.header.issue_root, ZERO_HASH);
 
 	Ok(())
 }
@@ -377,9 +428,6 @@ fn test_coin_maturity() -> Result<(), Error> {
 
 		h.spend_coinbase(reward.clone())?;
 	}
-
-	// Cleanup chain directory
-	clean_output_dir(chain_dir);
 
 	Ok(())
 }

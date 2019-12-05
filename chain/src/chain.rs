@@ -45,6 +45,7 @@ use crate::types::{
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::RwLock;
+use kepler_util::static_secp_instance;
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
 pub const MAX_ORPHAN_SIZE: usize = 200;
@@ -568,9 +569,10 @@ impl Chain {
 		// Set the output and kernel MMR sizes.
 		{
 			// Carefully destructure these correctly...
-			let (_, output_mmr_size, _, kernel_mmr_size) = sizes;
+			let (_, output_mmr_size, _, kernel_mmr_size, issue_mmr_size) = sizes;
 			b.header.output_mmr_size = output_mmr_size;
 			b.header.kernel_mmr_size = kernel_mmr_size;
+			b.header.issue_mmr_size = issue_mmr_size;
 		}
 
 		Ok(())
@@ -580,7 +582,7 @@ impl Chain {
 	/// the current txhashset state.
 	pub fn set_txhashset_roots(&self, b: &mut Block) -> Result<(), Error> {
 		let mut txhashset = self.txhashset.write();
-		let (prev_root, roots, sizes) =
+		let (prev_root, roots, sizes, issue_overage) =
 			txhashset::extending_readonly(&mut txhashset, |extension| {
 				// Retrieve the header root before we apply the new block
 				let prev_root = extension.header_root();
@@ -588,7 +590,12 @@ impl Chain {
 				// Apply the latest block to the chain state via the extension.
 				extension.apply_block(b)?;
 
-				Ok((prev_root, extension.roots(), extension.sizes()))
+				Ok((
+					prev_root,
+					extension.roots(),
+					extension.sizes(),
+					b.mint_overage()?,
+				))
 			})?;
 
 		// Set the prev_root on the header.
@@ -598,13 +605,24 @@ impl Chain {
 		b.header.output_root = roots.output_root;
 		b.header.range_proof_root = roots.rproof_root;
 		b.header.kernel_root = roots.kernel_root;
+		b.header.issue_root = roots.kernel_root;
 
 		// Set the output and kernel MMR sizes.
 		{
 			// Carefully destructure these correctly...
-			let (_, output_mmr_size, _, kernel_mmr_size) = sizes;
+			let (_, output_mmr_size, _, kernel_mmr_size, issue_mmr_size) = sizes;
 			b.header.output_mmr_size = output_mmr_size;
 			b.header.kernel_mmr_size = kernel_mmr_size;
+			b.header.issue_mmr_size = issue_mmr_size;
+		}
+
+		if let Some(overage) = issue_overage {
+			let secp = static_secp_instance();
+			let secp = secp.lock();
+			let new_overage =
+				secp.commit_sum(vec![b.header.total_issue_overage, overage], vec![])?;
+
+			b.header.total_issue_overage = new_overage;
 		}
 
 		Ok(())
