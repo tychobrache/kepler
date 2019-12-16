@@ -149,7 +149,10 @@ impl TransactionPool {
 		// Make sure the transaction is valid before anything else.
 		// Validate tx accounting for max tx weight.
 		tx.validate(Weighting::AsTransaction, self.verifier_cache.clone())
-			.map_err(PoolError::InvalidTx)?;
+			.map_err(|err| {
+				warn!("tx validate error: {}", err);
+				PoolError::InvalidTx(err)
+			})?;
 
 		// Check the tx lock_time is valid based on current chain state.
 		self.blockchain.verify_tx_lock_height(&tx)?;

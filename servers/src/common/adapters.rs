@@ -910,9 +910,10 @@ impl pool::BlockChain for PoolToChainAdapter {
 	}
 
 	fn validate_tx(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
-		self.chain()
-			.validate_tx(tx)
-			.map_err(|_| pool::PoolError::Other(format!("failed to validate tx")))
+		self.chain().validate_tx(tx).map_err(|err| {
+			println!("failed to validate tx: {}", err);
+			pool::PoolError::Other(format!("failed to validate tx"))
+		})
 	}
 
 	fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), pool::PoolError> {

@@ -100,7 +100,9 @@ impl PoolPushHandler {
 						.context(ErrorKind::Internal("Failed to get chain head".to_owned()))?;
 					let res = tx_pool
 						.add_to_pool(source, tx, !fluff, &header)
-						.context(ErrorKind::Internal("Failed to update pool".to_owned()))?;
+						.context(ErrorKind::Internal("Failed to update pool".to_owned()))
+						.unwrap();
+
 					Ok(res)
 				}),
 		)
@@ -113,6 +115,13 @@ impl Handler for PoolPushHandler {
 			self.update_pool(req)
 				.and_then(|_| ok(just_response(StatusCode::OK, "")))
 				.or_else(|e| {
+					error!("pool push error: {:?}", e);
+					//					for cause in e.inner.iter_causes() {
+					//						println!("{}", cause);
+					//					}
+
+					panic!(e);
+
 					ok(just_response(
 						StatusCode::INTERNAL_SERVER_ERROR,
 						format!("failed: {}", e),
