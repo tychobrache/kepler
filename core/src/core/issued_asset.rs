@@ -11,6 +11,7 @@ use crate::util::secp::{
 };
 
 use super::asset::Asset;
+use crate::core::Error;
 
 #[derive(Copy, Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub enum AssetAction {
@@ -20,6 +21,28 @@ pub enum AssetAction {
 }
 
 impl AssetAction {
+
+	// Verify signature against owner, if possible.
+	pub fn validate(&self) -> bool {
+		if self.is_new() {
+			self.validate_new()
+		} else {
+			true // in other cases, need to check txhashet for the signature
+		}
+	}
+
+	// Validate an new asset action's signature
+	pub fn validate_new(&self) -> bool {
+		if !self.is_new() {
+			panic!("Expecting asset action to be New");
+		}
+
+		let issued_asset = self.issued_asset().unwrap();
+		let owner = issued_asset.owner();
+
+		self.valid(owner)
+	}
+
 	pub fn valid(&self, pk: &PublicKey) -> bool {
 		let (bytes, sign) = match self {
 			AssetAction::New(_, issue, sign) => (bincode::serialize(&issue).unwrap(), sign),

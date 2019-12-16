@@ -38,6 +38,7 @@ use std::{error, fmt};
 
 use crate::core::asset::Asset;
 use crate::core::issued_asset::AssetAction;
+use crate::core::Error::InvalidAmountString;
 
 // Enum of various supported kernel "features".
 enum_from_primitive! {
@@ -784,7 +785,7 @@ impl TransactionBody {
 		Ok(())
 	}
 
-	fn verify_asset_actions(&self) -> Result<(), Error> {
+	fn verify_asset_actions_nodup(&self) -> Result<(), Error> {
 		if self.assets.len() < 2 {
 			return Ok(());
 		}
@@ -810,9 +811,21 @@ impl TransactionBody {
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
 
-		self.verify_asset_actions()?;
+		self.verify_asset_actions_nodup()?;
 
 		Ok(())
+	}
+
+	pub fn validate_asset_actions(&self) -> Result<(), Error> {
+		let ok = self.assets.iter().all(|action| {
+			action.validate()
+		});
+
+		if !ok {
+			Err(Error::IncorrectSignature)
+		} else {
+			Ok(())
+		}
 	}
 
 	/// Validates all relevant parts of a transaction body. Checks the
@@ -824,6 +837,8 @@ impl TransactionBody {
 		verifier: Arc<RwLock<dyn VerifierCache>>,
 	) -> Result<(), Error> {
 		self.validate_read(weighting)?;
+
+		self.validate_asset_actions()?;
 
 		// Find all the outputs that have not had their rangeproofs verified.
 		let outputs = {
