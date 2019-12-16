@@ -32,7 +32,7 @@ use crate::{consensus, global};
 use enum_primitive::FromPrimitive;
 use std::cmp::Ordering;
 use std::cmp::{max, min};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::{error, fmt};
 
@@ -109,6 +109,8 @@ pub enum Error {
 	InvalidKernelFeatures,
 	/// Signature verification error.
 	IncorrectSignature,
+	/// Duplicate asset actions with the same base point
+	DuplicateAssetPoints,
 	/// Underlying serialization error.
 	Serialization(ser::Error),
 }
@@ -782,6 +784,23 @@ impl TransactionBody {
 		Ok(())
 	}
 
+	fn verify_asset_actions(&self) -> Result<(), Error> {
+		if self.assets.len() < 2 {
+			return Ok(());
+		}
+		let mut uniq = HashSet::new();
+		let nodup = self
+			.assets
+			.iter()
+			.filter(|action| action.is_new())
+			.all(|action| uniq.insert(action.asset()));
+		if !nodup {
+			return Err(Error::DuplicateAssetPoints);
+		}
+
+		Ok(())
+	}
+
 	/// "Lightweight" validation that we can perform quickly during read/deserialization.
 	/// Subset of full validation that skips expensive verification steps, specifically -
 	/// * rangeproof verification
@@ -790,6 +809,9 @@ impl TransactionBody {
 		self.verify_weight(weighting)?;
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
+
+		self.verify_asset_actions()?;
+
 		Ok(())
 	}
 

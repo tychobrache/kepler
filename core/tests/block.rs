@@ -22,7 +22,7 @@ use crate::core::core::block::Error;
 use crate::core::core::hash::Hashed;
 use crate::core::core::id::ShortIdentifiable;
 use crate::core::core::issued_asset::AssetAction;
-use crate::core::core::transaction::{self, Transaction, Weighting};
+use crate::core::core::transaction::{self, Error as TxError, Transaction, Weighting};
 use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use crate::core::core::Committed;
 use crate::core::core::{
@@ -33,11 +33,16 @@ use crate::core::libtx::ProofBuilder;
 use crate::core::{global, ser};
 use crate::keychain::{BlindingFactor, ExtKeychain, ExtKeychainPath, Keychain};
 use crate::util::secp;
+use crate::util::secp::key::{PublicKey, SecretKey};
+use crate::util::secp::{Message, Signature};
 use crate::util::RwLock;
 use chrono::Duration;
 use kepler_core as core;
+use kepler_core::core::issued_asset::IssuedAsset;
 use kepler_keychain as keychain;
 use kepler_util as util;
+use kepler_util::static_secp_instance;
+use rand::thread_rng;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -177,6 +182,68 @@ fn empty_block_with_coinbase_is_valid() {
 // fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
 // 	Arc::new(RwLock::new(LruVerifierCache::new()))
 // }
+#[test]
+fn tx_with_duplicate_new_asset() {
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
+	let builder = ProofBuilder::new(&keychain);
+
+	let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
+	let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
+	let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
+
+	let btc_asset: Asset = "BTC".into();
+
+	let new_assest_action = {
+		let secp = static_secp_instance();
+		let secp = secp.lock(); // drop the static lock after using. The same static secp instance is used later in the scope by another function.
+
+		let sk = SecretKey::new(&secp, &mut thread_rng());
+		//			let sk = SecretKey::from_slice(&secp, &[1; 32]).unwrap();
+		let pubkey = PublicKey::from_secret_key(&secp, &sk).unwrap();
+
+		let issue_asset = IssuedAsset::new(100, pubkey, false, btc_asset);
+
+		let message = Message::from_bytes(&issue_asset.to_bytes()).unwrap();
+		let sig = secp.sign(&message, &sk).unwrap();
+
+		AssetAction::New(btc_asset, issue_asset, sig)
+	};
+
+	let new_assest_action2 = {
+		let secp = static_secp_instance();
+		let secp = secp.lock(); // drop the static lock after using. The same static secp instance is used later in the scope by another function.
+
+		let sk = SecretKey::new(&secp, &mut thread_rng());
+		//			let sk = SecretKey::from_slice(&secp, &[1; 32]).unwrap();
+		let pubkey = PublicKey::from_secret_key(&secp, &sk).unwrap();
+
+		let issue_asset = IssuedAsset::new(100, pubkey, false, btc_asset);
+
+		let message = Message::from_bytes(&issue_asset.to_bytes()).unwrap();
+		let sig = secp.sign(&message, &sk).unwrap();
+
+		AssetAction::New(btc_asset, issue_asset, sig)
+	};
+
+	let badtx = build::transaction(
+		vec![
+			input(Asset::default(), 2, key_id1),
+			mint(new_assest_action),
+			mint(new_assest_action2),
+			output(btc_asset, 100, key_id2),
+			with_fee(2),
+		],
+		&keychain,
+		&builder,
+	)
+	.unwrap();
+
+	match badtx.validate_read() {
+		Err(transaction::Error::DuplicateAssetPoints) => {}
+		Err(err) => panic!("unexpected tx error: {}", err),
+		Ok(()) => panic!("expect tx to be invalid because of duplicate error"),
+	}
+}
 
 #[test]
 fn block_with_mint_action() {
