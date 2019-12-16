@@ -17,7 +17,6 @@ pub enum AssetAction {
 	New(Asset, IssuedAsset, Signature),
 	Issue(Asset, u64, Signature),
 	Withdraw(Asset, u64, Signature),
-	ChangeOwner(Asset, PublicKey, Signature),
 }
 
 impl AssetAction {
@@ -26,7 +25,6 @@ impl AssetAction {
 			AssetAction::New(_, issue, sign) => (bincode::serialize(&issue).unwrap(), sign),
 			AssetAction::Issue(_, num, sign) => (bincode::serialize(&num).unwrap(), sign),
 			AssetAction::Withdraw(_, num, sign) => (bincode::serialize(&num).unwrap(), sign),
-			AssetAction::ChangeOwner(_, pk, sign) => (bincode::serialize(&pk).unwrap(), sign),
 		};
 
 		let message = &Message::from_bytes(&bytes).unwrap();
@@ -38,8 +36,7 @@ impl AssetAction {
 		match self {
 			AssetAction::New(asset, _, _)
 			| AssetAction::Issue(asset, _, _)
-			| AssetAction::Withdraw(asset, _, _)
-			| AssetAction::ChangeOwner(asset, _, _) => asset.clone(),
+			| AssetAction::Withdraw(asset, _, _) => asset.clone(),
 		}
 	}
 
@@ -47,7 +44,6 @@ impl AssetAction {
 		match self {
 			AssetAction::New(_, asset, _) => *asset.supply(),
 			AssetAction::Issue(_, amount, _) | AssetAction::Withdraw(_, amount, _) => *amount,
-			AssetAction::ChangeOwner(asset, _, _) => 0,
 		}
 	}
 
@@ -102,22 +98,6 @@ impl IssuedAsset {
 
 	pub fn to_bytes(&self) -> Vec<u8> {
 		bincode::serialize(self).unwrap()
-	}
-
-	pub fn change_owner_message(&self, new_pk: PublicKey) -> Message {
-		// TODO secp message
-		[0; 32].into()
-	}
-
-	pub fn change_owner(&mut self, new_pk: PublicKey, sign: Signature) -> bool {
-		let message = &self.change_owner_message(new_pk);
-		let secp = Secp256k1::with_caps(ContextFlag::VerifyOnly);
-		if secp.verify(&message, &sign, &self.owner).is_ok() {
-			self.owner = new_pk;
-			return true;
-		}
-
-		false
 	}
 }
 
