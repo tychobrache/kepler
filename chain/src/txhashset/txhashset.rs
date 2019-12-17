@@ -1330,15 +1330,6 @@ impl<'a> Extension<'a> {
 			}
 		}
 
-		let mut count = 0;
-		for asset in self.issue_pmmr.leaf_pos_iter() {
-			if let Some(issued_asset) = self.issue_pmmr.get_data(asset) {
-				self.batch
-					.save_issued_asset(issued_asset.asset(), &issued_asset)?;
-				count += 1;
-			}
-		}
-
 		debug!(
 			"txhashset: rebuild_index: {} UTXOs, took {}s",
 			count,
