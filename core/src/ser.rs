@@ -345,7 +345,7 @@ impl<'a> Reader for BinReader<'a> {
 	/// Read a fixed number of bytes.
 	fn read_fixed_bytes(&mut self, len: usize) -> Result<Vec<u8>, Error> {
 		// not reading more than 100k bytes in a single read
-		if len > 100_000 {
+		if len > 1_000_000 {
 			return Err(Error::TooLargeReadErr);
 		}
 		let mut buf = vec![0; len];
