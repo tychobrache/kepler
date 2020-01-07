@@ -46,7 +46,7 @@ pub enum Error {
 	#[fail(display = "LMDB error")]
 	LmdbErr(lmdb::error::Error),
 	/// Wraps a serialization error for Writeable or Readable
-	#[fail(display = "Serialization Error")]
+	#[fail(display = "Serialization Error: {}", _0)]
 	SerErr(String),
 }
 
