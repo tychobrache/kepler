@@ -138,7 +138,10 @@ pub enum ErrorKind {
 	#[fail(display = "Other Error: {}", _0)]
 	Other(String),
 	/// Error from summing and verifying kernel sums via committed trait.
-	#[fail(display = "Committed Trait: Error summing and verifying kernel sums")]
+	#[fail(
+		display = "Committed Trait: Error summing and verifying kernel sums: {}",
+		_0
+	)]
 	Committed(committed::Error),
 	/// We cannot process data once the Kepler server has been stopped.
 	#[fail(display = "Stopped (Kepler Shutting Down)")]

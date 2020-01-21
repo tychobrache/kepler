@@ -817,9 +817,7 @@ impl TransactionBody {
 	}
 
 	pub fn validate_asset_actions(&self) -> Result<(), Error> {
-		let ok = self.assets.iter().all(|action| {
-			action.validate()
-		});
+		let ok = self.assets.iter().all(|action| action.validate());
 
 		if !ok {
 			Err(Error::IncorrectSignature)

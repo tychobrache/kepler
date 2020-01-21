@@ -16,6 +16,7 @@
 //! kernel) along the overall header MMR conveniently and transactionally.
 
 use crate::core::core::asset::Asset;
+use crate::core::core::block::ZERO_OVERAGE_COMMITMENT;
 use crate::core::core::committed::Committed;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::issued_asset::IssuedAsset;
@@ -1268,9 +1269,20 @@ impl<'a> Extension<'a> {
 
 		let genesis = self.get_header_by_height(0)?;
 
+		let issue_overage = {
+			if self.header.total_issue_overage == *ZERO_OVERAGE_COMMITMENT {
+				None
+			} else {
+				Some(self.header.total_issue_overage)
+			}
+		};
+
+		println!("total issue overage: {:?}", issue_overage); // oh i c. i think i need to add the asset mint "zero" here...
+													  // why ius overage negative here? does mint_overage need to be negated as well?
+
 		let (utxo_sum, kernel_sum) = self.verify_kernel_sums(
 			self.header.total_overage(genesis.kernel_mmr_size > 0),
-			None, // TODO if sum all asset action
+			issue_overage,
 			self.header.total_kernel_offset(),
 		)?;
 
