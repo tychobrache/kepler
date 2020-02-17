@@ -269,6 +269,12 @@ impl<T: PMMRable> PMMRBackend<T> {
 	/// Number of hashes in the PMMR stored by this backend. Only produces the
 	/// fully sync'd size.
 	pub fn unpruned_size(&self) -> u64 {
+		println!(
+			"{:?} hash_size={} prune_shift={}",
+			self.data_dir,
+			self.hash_size(),
+			self.prune_list.get_total_shift()
+		);
 		self.hash_size() + self.prune_list.get_total_shift()
 	}
 

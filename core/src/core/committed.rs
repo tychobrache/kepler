@@ -17,6 +17,7 @@
 use crate::keychain;
 use crate::keychain::BlindingFactor;
 
+use crate::core::block::ZERO_OVERAGE_COMMITMENT;
 use crate::core::issued_asset::AssetAction;
 use crate::util::secp::key::SecretKey;
 use crate::util::secp::pedersen::Commitment;
@@ -86,7 +87,11 @@ pub trait Committed {
 	}
 
 	/// Gathers commitments and sum them.
-	fn sum_commitments(&self, overage: i64, mint_overage: Option<Commitment>) -> Result<Commitment, Error> {
+	fn sum_commitments(
+		&self,
+		overage: i64,
+		mint_overage: Option<Commitment>,
+	) -> Result<Commitment, Error> {
 		// gather the commitments
 		let mut input_commits = self.inputs_committed();
 		let mut output_commits = self.outputs_committed();
@@ -109,6 +114,8 @@ pub trait Committed {
 
 		if let Some(mint_overage) = mint_overage {
 			input_commits.push(mint_overage);
+			// also add the ZERO_OVERAGE_COMMITMENT
+			//			input_commits.push(*ZERO_OVERAGE_COMMITMENT);
 		}
 
 		sum_commits(output_commits, input_commits)

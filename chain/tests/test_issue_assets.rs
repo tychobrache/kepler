@@ -19,7 +19,7 @@ use self::core::core::verifier_cache::LruVerifierCache;
 use self::core::global::{self, ChainTypes};
 use self::core::libtx::{self, build, ProofBuilder};
 use self::core::pow::Difficulty;
-use self::core::{consensus, pow};
+use self::core::{consensus, genesis, pow};
 use self::keychain::{ExtKeychain, ExtKeychainPath, Identifier, Keychain};
 use self::util::RwLock;
 use chrono::Duration;
@@ -54,11 +54,16 @@ struct Harness<'a> {
 	keychain: &'a ExtKeychain,
 	builder: ProofBuilder<'a, ExtKeychain>,
 	d0: u32,
+
+	// remove data directory after test harness is dropped
+	auto_clean: bool,
 }
 
 impl<'a> Drop for Harness<'a> {
 	fn drop(&mut self) {
-		clean_output_dir(self.dir);
+		if self.auto_clean {
+			clean_output_dir(self.dir);
+		}
 	}
 }
 
@@ -93,6 +98,7 @@ impl<'a> Harness<'a> {
 			keychain,
 			builder,
 			d0: 0,
+			auto_clean: true,
 		}
 	}
 
@@ -343,6 +349,68 @@ impl<'a> Harness<'a> {
 //
 //	Ok(())
 //}
+
+fn reload_chain(dir_name: &str) -> Chain {
+	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+	chain::Chain::init(
+		dir_name.to_string(),
+		Arc::new(NoopAdapter {}),
+		genesis::genesis_dev(),
+		pow::verify_size,
+		verifier_cache,
+		false,
+	)
+	.unwrap()
+}
+
+#[test]
+fn test_issue_asset_txhashset_serialize() -> Result<(), Error> {
+	global::set_test_block_max_weight(350);
+
+	let chain_dir = ".kepler_test_issue_asset_txhashset_serialize";
+
+	clean_output_dir(chain_dir);
+
+	// keychain will serialize & close after this block
+	{
+		// use a fixed seed...
+
+		let keychain = ExtKeychain::from_seed("abcd".as_bytes(), true)?;
+		//		let keychain = ExtKeychain::from_random_seed(false)?;
+
+		// for this test, don't clean up after harness is released -.-
+		let mut h = Harness::setup(chain_dir, &keychain);
+		h.auto_clean = false;
+
+		h.issue_asset()?;
+
+		//		let tip = h.chain.head()?;
+
+		let head = h.chain.head_header()?;
+		assert_eq!(head.issue_mmr_size, 1);
+	}
+
+	{
+		// hmm. for some reason the txhashet/issue directory lacks pmmr_size.bin
+		//
+		// rangeproof is fixed size. it has "data", "hash", "leaf"
+		// pruneable adds "pmmr_leaf.bin"? probably needs to figure out how size info is given.
+		//
+		// hmmm. output_mmr_size is also 1, which seems strange. there should 1 output for change,
+		// one output for asset. maybe even 1 for coinbase? total of 3?
+		//
+		// is it about txhashet extension "snapshot" not saved? trace doesn't go there though.
+		//
+		// TODO: figure out what snapshot does
+
+		let chain = reload_chain(chain_dir);
+		chain.validate(false)?;
+	}
+
+	clean_output_dir(chain_dir);
+
+	Ok(())
+}
 
 #[test]
 fn test_issue_asset() -> Result<(), Error> {

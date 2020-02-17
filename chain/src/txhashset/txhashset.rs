@@ -376,6 +376,7 @@ where
 	trees.output_pmmr_h.backend.discard();
 	trees.rproof_pmmr_h.backend.discard();
 	trees.kernel_pmmr_h.backend.discard();
+	trees.issue_pmmr_h.backend.discard();
 
 	trace!("TxHashSet (readonly) extension done.");
 
@@ -491,6 +492,7 @@ where
 				trees.output_pmmr_h.backend.sync()?;
 				trees.rproof_pmmr_h.backend.sync()?;
 				trees.kernel_pmmr_h.backend.sync()?;
+				trees.issue_pmmr_h.backend.sync()?;
 
 				trees.header_pmmr_h.last_pos = sizes.0;
 				trees.output_pmmr_h.last_pos = sizes.1;
@@ -828,6 +830,7 @@ impl<'a> Committed for Extension<'a> {
 				commitments.push(out.commit);
 			}
 		}
+
 		commitments
 	}
 
@@ -907,7 +910,13 @@ impl<'a> Extension<'a> {
 		for action in b.assets() {
 			if action.is_new() {
 				let asset = action.issued_asset().unwrap();
-				let pos = self.apply_issued_asset(&asset)?;
+				self.apply_issued_asset(&asset)?;
+				// did pmmr size change and root after?
+				println!(
+					"issue_root={}, issue mmr size: {}",
+					self.issue_pmmr.root(),
+					self.issue_pmmr.unpruned_size()
+				);
 				self.batch.save_issued_asset(asset.asset(), &asset)?;
 			}
 		}
@@ -1105,6 +1114,7 @@ impl<'a> Extension<'a> {
 			header_pos,
 			header.output_mmr_size,
 			header.kernel_mmr_size,
+			header.issue_mmr_size,
 			&rewind_rm_pos,
 		)?;
 
@@ -1121,6 +1131,7 @@ impl<'a> Extension<'a> {
 		header_pos: u64,
 		output_pos: u64,
 		kernel_pos: u64,
+		issue_pos: u64,
 		rewind_rm_pos: &Bitmap,
 	) -> Result<(), Error> {
 		debug!(
@@ -1139,6 +1150,9 @@ impl<'a> Extension<'a> {
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		self.kernel_pmmr
 			.rewind(kernel_pos, &Bitmap::create())
+			.map_err(&ErrorKind::TxHashSetErr)?;
+		self.issue_pmmr
+			.rewind(issue_pos, &Bitmap::create())
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		Ok(())
 	}
@@ -1182,6 +1196,7 @@ impl<'a> Extension<'a> {
 		if roots.output_root != self.header.output_root
 			|| roots.rproof_root != self.header.range_proof_root
 			|| roots.kernel_root != self.header.kernel_root
+			|| roots.issue_root != self.header.issue_root
 		{
 			Err(ErrorKind::InvalidRoot.into())
 		} else {
@@ -1216,6 +1231,11 @@ impl<'a> Extension<'a> {
 			self.sizes();
 		let expected_header_mmr_size = pmmr::insertion_to_pmmr_index(self.header.height + 2) - 1;
 
+		//		println!("txhashet pmmr issue size: {}", issue_mmr_size);
+		//		if issue_mmr_size == 1 {
+		//			println!("issue_mmr_size is one!");
+		//		}
+
 		if header_mmr_size != expected_header_mmr_size {
 			Err(ErrorKind::InvalidMMRSize.into())
 		} else if output_mmr_size != self.header.output_mmr_size {
@@ -1247,17 +1267,25 @@ impl<'a> Extension<'a> {
 		if let Err(e) = self.kernel_pmmr.validate() {
 			return Err(ErrorKind::InvalidTxHashSet(e).into());
 		}
+		if let Err(e) = self.issue_pmmr.validate() {
+			return Err(ErrorKind::InvalidTxHashSet(e).into());
+		}
 
 		debug!(
-			"txhashset: validated the header {}, output {}, rproof {}, kernel {} mmrs, took {}s",
+			"txhashset: validated the header {}, output {}, rproof {}, kernel {} mmrs, issue {} mmrs, took {}s",
 			self.header_pmmr.unpruned_size(),
 			self.output_pmmr.unpruned_size(),
 			self.rproof_pmmr.unpruned_size(),
 			self.kernel_pmmr.unpruned_size(),
+			self.issue_pmmr.unpruned_size(),
 			now.elapsed().as_secs(),
 		);
 
 		Ok(())
+	}
+
+	fn has_issued_asset(&self) -> bool {
+		self.header.issue_mmr_size > 0
 	}
 
 	/// Validate full kernel sums against the provided header (for overage and kernel_offset).
@@ -1270,15 +1298,15 @@ impl<'a> Extension<'a> {
 		let genesis = self.get_header_by_height(0)?;
 
 		let issue_overage = {
-			if self.header.total_issue_overage == *ZERO_OVERAGE_COMMITMENT {
-				None
-			} else {
+			if self.has_issued_asset() {
 				Some(self.header.total_issue_overage)
+			} else {
+				None
 			}
 		};
 
-		println!("total issue overage: {:?}", issue_overage); // oh i c. i think i need to add the asset mint "zero" here...
-													  // why ius overage negative here? does mint_overage need to be negated as well?
+		// oh i c. i think i need to add the asset mint "zero" here...
+		println!("total issue overage: {:?}", issue_overage);
 
 		let (utxo_sum, kernel_sum) = self.verify_kernel_sums(
 			self.header.total_overage(genesis.kernel_mmr_size > 0),

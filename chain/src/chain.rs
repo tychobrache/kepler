@@ -26,6 +26,7 @@ use std::time::{Duration, Instant};
 use kepler_store::Error::NotFoundErr;
 
 use crate::core::core::asset::Asset;
+use crate::core::core::block::ZERO_OVERAGE_COMMITMENT;
 use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::verifier_cache::VerifierCache;
@@ -605,7 +606,7 @@ impl Chain {
 		b.header.output_root = roots.output_root;
 		b.header.range_proof_root = roots.rproof_root;
 		b.header.kernel_root = roots.kernel_root;
-		b.header.issue_root = roots.kernel_root;
+		b.header.issue_root = roots.issue_root;
 
 		// Set the output and kernel MMR sizes.
 		{
@@ -619,8 +620,12 @@ impl Chain {
 		if let Some(overage) = issue_overage {
 			let secp = static_secp_instance();
 			let secp = secp.lock();
-			let new_overage =
-				secp.commit_sum(vec![b.header.total_issue_overage, overage], vec![])?;
+
+			let new_overage = if b.header.total_issue_overage == *ZERO_OVERAGE_COMMITMENT {
+				overage
+			} else {
+				secp.commit_sum(vec![b.header.total_issue_overage, overage], vec![])?
+			};
 
 			b.header.total_issue_overage = new_overage;
 		}
