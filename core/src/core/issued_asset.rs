@@ -21,7 +21,6 @@ pub enum AssetAction {
 }
 
 impl AssetAction {
-
 	// Verify signature against owner, if possible.
 	pub fn validate(&self) -> bool {
 		if self.is_new() {
@@ -120,15 +119,16 @@ impl IssuedAsset {
 	}
 
 	pub fn to_bytes(&self) -> Vec<u8> {
+		// FIXME: only used for signing message... maybe should use the same as Readable
 		bincode::serialize(self).unwrap()
 	}
 }
 
 impl Readable for IssuedAsset {
 	fn read(reader: &mut dyn Reader) -> Result<IssuedAsset, ser::Error> {
-		let vec = reader.read_fixed_bytes(114)?;
+		let vec = reader.read_fixed_bytes(106)?;
 
-		// supply:u64, 16 bytes
+		// supply:u64, 8 bytes
 		let mut supply_bytes = [0u8; 8];
 		supply_bytes.copy_from_slice(&vec[0..8]);
 		let supply = u64::from_be_bytes(supply_bytes);

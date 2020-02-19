@@ -295,6 +295,14 @@ impl<'a> Batch<'a> {
 		)
 	}
 
+	pub fn clear_issued_assets(&self) -> Result<(), Error> {
+		let key = to_key(ASSET_PREFIX, &mut "".to_string().into_bytes());
+		for (k, _) in self.db.iter::<u64>(&key)? {
+			self.db.delete(&k)?;
+		}
+		Ok(())
+	}
+
 	/// Clear all entries from the output_pos index (must be rebuilt after).
 	pub fn clear_output_pos(&self) -> Result<(), Error> {
 		let key = to_key(COMMIT_POS_PREFIX, &mut "".to_string().into_bytes());

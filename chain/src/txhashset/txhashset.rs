@@ -16,7 +16,6 @@
 //! kernel) along the overall header MMR conveniently and transactionally.
 
 use crate::core::core::asset::Asset;
-use crate::core::core::block::ZERO_OVERAGE_COMMITMENT;
 use crate::core::core::committed::Committed;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::issued_asset::IssuedAsset;
@@ -1370,9 +1369,23 @@ impl<'a> Extension<'a> {
 			}
 		}
 
+		self.batch.clear_issued_assets()?;
+
+		let mut count2 = 0;
+		for n in 1..self.issue_pmmr.unpruned_size() + 1 {
+			if pmmr::is_leaf(n) {
+				if let Some(issued_asset) = &self.issue_pmmr.get_data(n) {
+					self.batch
+						.save_issued_asset(issued_asset.asset(), issued_asset)?;
+					count2 += 1;
+				}
+			}
+		}
+
 		debug!(
-			"txhashset: rebuild_index: {} UTXOs, took {}s",
+			"txhashset: rebuild_index: {} UTXOs, {} Assets took {}s",
 			count,
+			count2,
 			now.elapsed().as_secs(),
 		);
 
@@ -1649,11 +1662,16 @@ fn expected_file(path: &Path) -> bool {
 /// Check a txhashset directory and remove any unexpected
 fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Result<(), Error> {
 	// First compare the subdirectories
-	let subdirectories_expected: HashSet<_> = [OUTPUT_SUBDIR, KERNEL_SUBDIR, RANGE_PROOF_SUBDIR]
-		.iter()
-		.cloned()
-		.map(|s| String::from(s))
-		.collect();
+	let subdirectories_expected: HashSet<_> = [
+		OUTPUT_SUBDIR,
+		KERNEL_SUBDIR,
+		RANGE_PROOF_SUBDIR,
+		ISSUE_SUBDIR,
+	]
+	.iter()
+	.cloned()
+	.map(|s| String::from(s))
+	.collect();
 
 	let subdirectories_found: HashSet<_> = fs::read_dir(txhashset_path)?
 		.filter_map(|entry| {

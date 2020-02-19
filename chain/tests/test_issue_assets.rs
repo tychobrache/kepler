@@ -39,6 +39,7 @@ use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::{Message, Signature};
 use crate::util::static_secp_instance;
 use kepler_core::core::hash::ZERO_HASH;
+use kepler_core::ser;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -273,9 +274,7 @@ impl<'a> Harness<'a> {
 	}
 
 	// -> (Block, Identifier)
-	fn issue_asset(&mut self) -> Result<(Block, Identifier), Error> {
-		let btc_asset: Asset = "btc".into();
-
+	fn issue_asset(&mut self, asset: Asset) -> Result<(Block, Identifier), Error> {
 		let (_, output) = self.mine_plain_output()?;
 		let amount = self.reward_amount() - 2;
 		let fee = 2;
@@ -292,12 +291,12 @@ impl<'a> Harness<'a> {
 			//			let sk = SecretKey::from_slice(&secp, &[1; 32]).unwrap();
 			let pubkey = PublicKey::from_secret_key(&secp, &sk).unwrap();
 
-			let issue_asset = IssuedAsset::new(100, pubkey, false, btc_asset);
+			let issue_asset = IssuedAsset::new(100, pubkey, false, asset);
 
 			let message = Message::from_bytes(&issue_asset.to_bytes()).unwrap();
 			let sig = secp.sign(&message, &sk).unwrap();
 
-			AssetAction::New(btc_asset, issue_asset, sig)
+			AssetAction::New(asset, issue_asset, sig)
 		};
 
 		let tx = build::transaction(
@@ -305,7 +304,7 @@ impl<'a> Harness<'a> {
 				build::input(Asset::default(), amount, output),
 				build::output(Asset::default(), amount - fee, change_key_id),
 				build::mint(new_assest_action),
-				build::output(btc_asset, 100, asset_output_key_id.clone()),
+				build::output(asset, 100, asset_output_key_id.clone()),
 				build::with_fee(fee),
 			],
 			self.keychain,
@@ -320,35 +319,6 @@ impl<'a> Harness<'a> {
 		Ok((block, asset_output_key_id))
 	}
 }
-
-//#[test]
-//fn test_add_zero_commit() -> Result<(), Error> {
-//	let secp = static_secp_instance();
-//	let secp = secp.lock();
-//
-//	let zero = secp.commit_value_with_generator(0, Asset::default().into())?;
-//
-//	println!("zero: {:?}", zero);
-////	let zerozero = secp.commit_sum(vec![zero, zero], vec![zero])?;
-//
-//	let btc: Asset = "btc".into();
-//	let sk = SecretKey::new(&secp, &mut thread_rng());
-//	let v = secp.commit_with_generator(10, sk, btc.into())?;
-//
-//	let sum = secp.commit_sum(vec![zero, v], vec![])?;
-//	println!("zero + v: {:?}", sum);
-//
-////	sum.clone();
-//
-//	// the "zero commitment" is loading 32 zero-bytes as generator. [0u8;32]*G isn't infinity.
-//	println!("zero == zero + zero: {}", secp.verify_commit_sum(vec![zero, zero], vec![zero]));
-//
-//	// but summing works as expected. so it's probably ok to just start from zero...
-//	println!("verify sum: {}", secp.verify_commit_sum(vec![zero, v], vec![sum]));
-//
-//
-//	Ok(())
-//}
 
 fn reload_chain(dir_name: &str) -> Chain {
 	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
@@ -382,27 +352,13 @@ fn test_issue_asset_txhashset_serialize() -> Result<(), Error> {
 		let mut h = Harness::setup(chain_dir, &keychain);
 		h.auto_clean = false;
 
-		h.issue_asset()?;
-
-		//		let tip = h.chain.head()?;
+		let (b, _) = h.issue_asset("btc".into())?;
 
 		let head = h.chain.head_header()?;
 		assert_eq!(head.issue_mmr_size, 1);
 	}
 
 	{
-		// hmm. for some reason the txhashet/issue directory lacks pmmr_size.bin
-		//
-		// rangeproof is fixed size. it has "data", "hash", "leaf"
-		// pruneable adds "pmmr_leaf.bin"? probably needs to figure out how size info is given.
-		//
-		// hmmm. output_mmr_size is also 1, which seems strange. there should 1 output for change,
-		// one output for asset. maybe even 1 for coinbase? total of 3?
-		//
-		// is it about txhashet extension "snapshot" not saved? trace doesn't go there though.
-		//
-		// TODO: figure out what snapshot does
-
 		let chain = reload_chain(chain_dir);
 		chain.validate(false)?;
 	}
@@ -417,24 +373,34 @@ fn test_issue_asset() -> Result<(), Error> {
 	global::set_test_block_max_weight(350);
 
 	let chain_dir = ".kepler_test_issue_asset";
+	clean_output_dir(chain_dir);
 
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let mut h = Harness::setup(chain_dir, &keychain);
+	h.auto_clean = false;
 
-	let (block, _) = h.issue_asset()?;
+	let (block, _) = h.issue_asset("btc".into())?;
 
-	let expected_overage = {
-		let overage = block.mint_overage()?.unwrap();
-
-		let secp = static_secp_instance();
-		let secp = secp.lock();
-		let new_overage = secp.commit_sum(vec![*ZERO_OVERAGE_COMMITMENT, overage], vec![])?;
-		new_overage
-	};
+	let expected_overage = block.mint_overage()?.unwrap();
 
 	assert_eq!(block.header.issue_mmr_size, 1);
 	assert_eq!(block.header.total_issue_overage, expected_overage);
 	assert_ne!(block.header.issue_root, ZERO_HASH);
+
+	let (block2, _) = h.issue_asset("eth".into())?;
+
+	let expected_overage2 = {
+		let overage = block2.mint_overage()?.unwrap();
+
+		let secp = static_secp_instance();
+		let secp = secp.lock();
+		let new_overage = secp.commit_sum(vec![expected_overage, overage], vec![])?;
+		new_overage
+	};
+
+	// The mmr size includes non-leaf nodes. There are two "assets" nodes, and 1 parent (the peak).
+	assert_eq!(block2.header.issue_mmr_size, 3);
+	assert_eq!(block2.header.total_issue_overage, expected_overage2);
 
 	Ok(())
 }
