@@ -551,6 +551,8 @@ pub struct BlockHeaderPrintable {
 	pub range_proof_root: String,
 	/// Merklish root of all transaction kernels in the TxHashSet
 	pub kernel_root: String,
+	/// Merklish root of all asset issuances in the TxHashSet
+	pub issue_root: String,
 	/// Nonce increment used to mine this block.
 	pub nonce: u64,
 	/// Size of the cuckoo graph
@@ -563,6 +565,9 @@ pub struct BlockHeaderPrintable {
 	pub secondary_scaling: u32,
 	/// Total kernel offset since genesis block
 	pub total_kernel_offset: String,
+
+	/// Total asset issue overage since genesis block
+	pub total_issue_overage: String,
 }
 
 impl BlockHeaderPrintable {
@@ -577,12 +582,14 @@ impl BlockHeaderPrintable {
 			output_root: util::to_hex(header.output_root.to_vec()),
 			range_proof_root: util::to_hex(header.range_proof_root.to_vec()),
 			kernel_root: util::to_hex(header.kernel_root.to_vec()),
+			issue_root: util::to_hex(header.issue_root.to_vec()),
 			nonce: header.pow.nonce,
 			edge_bits: header.pow.edge_bits(),
 			cuckoo_solution: header.pow.proof.nonces.clone(),
 			total_difficulty: header.pow.total_difficulty.to_num(),
 			secondary_scaling: header.pow.secondary_scaling,
 			total_kernel_offset: header.total_kernel_offset.to_hex(),
+			total_issue_overage: util::to_hex(header.total_issue_overage.0.to_vec()),
 		}
 	}
 }
