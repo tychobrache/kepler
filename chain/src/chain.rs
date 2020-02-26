@@ -618,16 +618,7 @@ impl Chain {
 		}
 
 		if let Some(overage) = issue_overage {
-			let secp = static_secp_instance();
-			let secp = secp.lock();
-
-			let new_overage = if b.header.total_issue_overage == *ZERO_OVERAGE_COMMITMENT {
-				overage
-			} else {
-				secp.commit_sum(vec![b.header.total_issue_overage, overage], vec![])?
-			};
-
-			b.header.total_issue_overage = new_overage;
+			b.header.total_issue_overage = b.header.add_issue_overage(overage)?;
 		}
 
 		Ok(())

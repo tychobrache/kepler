@@ -38,6 +38,7 @@ use crate::ser::{self, FixedLength, PMMRable, Readable, Reader, Writeable, Write
 use crate::util::{secp, static_secp_instance};
 
 use super::issued_asset::AssetAction;
+use crate::libtx::build::mint;
 
 lazy_static! {
 	/// The "zero" overage when no asset had been issued. This is loading 32 zero-bytes as generator.
@@ -323,7 +324,7 @@ impl Readable for BlockHeader {
 		let kernel_root = Hash::read(reader)?;
 		let asset_root = Hash::read(reader)?;
 		let total_kernel_offset = BlindingFactor::read(reader)?;
-		let (output_mmr_size, kernel_mmr_size, asset_mmr_size) =
+		let (output_mmr_size, kernel_mmr_size, issue_mmr_size) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 		let total_issue_overage = Commitment::read(reader)?;
 		let pow = ProofOfWork::read(reader)?;
@@ -355,7 +356,7 @@ impl Readable for BlockHeader {
 			total_kernel_offset,
 			output_mmr_size,
 			kernel_mmr_size,
-			issue_mmr_size: asset_mmr_size,
+			issue_mmr_size,
 			total_issue_overage,
 			pow,
 		})
@@ -363,6 +364,18 @@ impl Readable for BlockHeader {
 }
 
 impl BlockHeader {
+	pub fn add_issue_overage(&self, issue_overage: Commitment) -> Result<Commitment, Error> {
+		let new_overage = if self.total_issue_overage == *ZERO_OVERAGE_COMMITMENT {
+			issue_overage
+		} else {
+			let secp = static_secp_instance();
+			let secp = secp.lock();
+			secp.commit_sum(vec![self.total_issue_overage, issue_overage], vec![])?
+		};
+
+		return Ok(new_overage);
+	}
+
 	/// Write the pre-hash portion of the header
 	pub fn write_pre_pow<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.version.write(writer)?;
@@ -610,6 +623,12 @@ impl Block {
 			vec![],
 		)?;
 
+		let total_issue_overage = if let Some(issue_overage) = agg_tx.body.mint_overage()? {
+			prev.add_issue_overage(issue_overage)?
+		} else {
+			prev.total_issue_overage
+		};
+
 		let height = prev.height + 1;
 
 		let mut version = prev.version;
@@ -634,6 +653,7 @@ impl Block {
 					total_difficulty: difficulty + prev.pow.total_difficulty,
 					..Default::default()
 				},
+				total_issue_overage,
 				..Default::default()
 			},
 			body: agg_tx.into(),
