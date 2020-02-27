@@ -617,10 +617,6 @@ impl Chain {
 			b.header.issue_mmr_size = issue_mmr_size;
 		}
 
-		if let Some(overage) = issue_overage {
-			b.header.total_issue_overage = b.header.add_issue_overage(overage)?;
-		}
-
 		Ok(())
 	}
 

@@ -383,11 +383,6 @@ fn test_issue_asset() -> Result<(), Error> {
 
 	let expected_overage = block.mint_overage()?.unwrap();
 
-	println!(
-		"header total issue overage: {:?}",
-		block.header.total_issue_overage.0.to_vec()
-	);
-
 	assert_eq!(block.header.issue_mmr_size, 1);
 	assert_eq!(block.header.total_issue_overage, expected_overage);
 	assert_ne!(block.header.issue_root, ZERO_HASH);
@@ -405,7 +400,7 @@ fn test_issue_asset() -> Result<(), Error> {
 
 	// The mmr size includes non-leaf nodes. There are two "assets" nodes, and 1 parent (the peak).
 	assert_eq!(block2.header.issue_mmr_size, 3);
-	//	assert_eq!(block2.header.total_issue_overage, expected_overage2);
+	assert_eq!(block2.header.total_issue_overage, expected_overage2);
 
 	Ok(())
 }
