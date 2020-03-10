@@ -551,6 +551,7 @@ pub struct BlockHeaderPrintable {
 	pub range_proof_root: String,
 	/// Merklish root of all transaction kernels in the TxHashSet
 	pub kernel_root: String,
+	pub kernel_mmr_size: u64,
 	/// Merklish root of all asset issuances in the TxHashSet
 	pub issue_root: String,
 	/// Nonce increment used to mine this block.
@@ -582,6 +583,7 @@ impl BlockHeaderPrintable {
 			output_root: util::to_hex(header.output_root.to_vec()),
 			range_proof_root: util::to_hex(header.range_proof_root.to_vec()),
 			kernel_root: util::to_hex(header.kernel_root.to_vec()),
+			kernel_mmr_size: header.kernel_mmr_size,
 			issue_root: util::to_hex(header.issue_root.to_vec()),
 			nonce: header.pow.nonce,
 			edge_bits: header.pow.edge_bits(),
