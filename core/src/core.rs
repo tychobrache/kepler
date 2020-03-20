@@ -14,12 +14,14 @@
 
 //! Core types
 
+pub mod asset;
 pub mod block;
 pub mod block_sums;
 pub mod committed;
 pub mod compact_block;
 pub mod hash;
 pub mod id;
+pub mod issued_asset;
 pub mod merkle_proof;
 pub mod pmmr;
 pub mod transaction;
