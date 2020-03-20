@@ -58,7 +58,12 @@ pub type Append<K, B> = dyn for<'a> Fn(
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
-fn build_input<K, B>(value: u64, features: OutputFeatures, key_id: Identifier) -> Box<Append<K, B>>
+fn build_input<K, B>(
+	asset: Asset,
+	value: u64,
+	features: OutputFeatures,
+	key_id: Identifier,
+) -> Box<Append<K, B>>
 where
 	K: Keychain,
 	B: ProofBuild,
@@ -66,12 +71,14 @@ where
 	Box::new(
 		move |build, acc| -> Result<(Transaction, BlindSum), Error> {
 			if let Ok((tx, sum)) = acc {
-				let commit =
-					build
-						.keychain
-						.commit(value, &key_id, SwitchCommitmentType::Regular)?;
+				let commit = build.keychain.commit(
+					value,
+					&key_id,
+					SwitchCommitmentType::Regular,
+					asset.into(),
+				)?;
 				// TODO: proper support for different switch commitment schemes
-				let input = Input::new(features, commit);
+				let input = Input::new(features, commit, asset);
 				Ok((
 					tx.with_input(input),
 					sum.sub_key_id(key_id.to_value_path(value)),
@@ -85,7 +92,7 @@ where
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
-pub fn input<K, B>(value: u64, key_id: Identifier) -> Box<Append<K, B>>
+pub fn input<K, B>(asset: Asset, value: u64, key_id: Identifier) -> Box<Append<K, B>>
 where
 	K: Keychain,
 	B: ProofBuild,
@@ -94,7 +101,7 @@ where
 		"Building input (spending regular output): {}, {}",
 		value, key_id
 	);
-	build_input(value, OutputFeatures::Plain, key_id)
+	build_input(asset, value, OutputFeatures::Plain, key_id)
 }
 
 /// Adds a coinbase input spending a coinbase output.
@@ -104,12 +111,12 @@ where
 	B: ProofBuild,
 {
 	debug!("Building input (spending coinbase): {}, {}", value, key_id);
-	build_input(value, OutputFeatures::Coinbase, key_id)
+	build_input(Asset::default(), value, OutputFeatures::Coinbase, key_id)
 }
 
 /// Adds an output with the provided value and key identifier from the
 /// keychain.
-pub fn output<K, B>(value: u64, key_id: Identifier) -> Box<Append<K, B>>
+pub fn output<K, B>(asset: Asset, value: u64, key_id: Identifier) -> Box<Append<K, B>>
 where
 	K: Keychain,
 	B: ProofBuild,
@@ -121,7 +128,9 @@ where
 			// TODO: proper support for different switch commitment schemes
 			let switch = SwitchCommitmentType::Regular;
 
-			let commit = build.keychain.commit(value, &key_id, switch)?;
+			let commit = build
+				.keychain
+				.commit(value, &key_id, switch, asset.into())?;
 
 			debug!("Building output: {}, {:?}", value, commit);
 
@@ -133,6 +142,7 @@ where
 				switch,
 				commit,
 				None,
+				asset,
 			)?;
 
 			Ok((
@@ -140,6 +150,7 @@ where
 					features: OutputFeatures::Plain,
 					commit,
 					proof: rproof,
+					asset: asset,
 				}),
 				sum.add_key_id(key_id.to_value_path(value)),
 			))
@@ -271,7 +282,11 @@ mod test {
 
 		let tx = transaction(
 			KernelFeatures::Plain { fee: 2 },
-			vec![input(10, key_id1), input(12, key_id2), output(20, key_id3)],
+			vec![
+				input(Asset::default(), 10, key_id1),
+				input(Asset::default(), 12, key_id2),
+				output(Asset::default(), 20, key_id3),
+			],
 			&keychain,
 			&builder,
 		)
@@ -292,7 +307,11 @@ mod test {
 
 		let tx = transaction(
 			KernelFeatures::Plain { fee: 2 },
-			vec![input(10, key_id1), input(12, key_id2), output(20, key_id3)],
+			vec![
+				input(Asset::default(), 10, key_id1),
+				input(Asset::default(), 12, key_id2),
+				output(Asset::default(), 20, key_id3),
+			],
 			&keychain,
 			&builder,
 		)
@@ -312,7 +331,10 @@ mod test {
 
 		let tx = transaction(
 			KernelFeatures::Plain { fee: 4 },
-			vec![input(6, key_id1), output(2, key_id2)],
+			vec![
+				input(Asset::default(), 6, key_id1),
+				output(Asset::default(), 2, key_id2),
+			],
 			&keychain,
 			&builder,
 		)

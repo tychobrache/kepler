@@ -24,6 +24,8 @@ use util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
 use util::secp::{self, Secp256k1};
 use zeroize::Zeroize;
 
+use crate::core::asset::Asset;
+
 /// Create a bulletproof
 pub fn create<K, B>(
 	k: &K,
@@ -33,6 +35,7 @@ pub fn create<K, B>(
 	switch: SwitchCommitmentType,
 	_commit: Commitment,
 	extra_data: Option<Vec<u8>>,
+	asset: Asset,
 ) -> Result<RangeProof, Error>
 where
 	K: Keychain,
@@ -42,18 +45,19 @@ where
 	// The new bulletproof scheme encodes and decodes it, but
 	// it is not supported at the wallet level (yet).
 	let secp = k.secp();
-	let commit = k.commit(amount, key_id, switch)?;
+	let commit = k.commit(amount, key_id, switch, asset.into())?;
 	let skey = k.derive_key(amount, key_id, switch)?;
 	let rewind_nonce = b.rewind_nonce(secp, &commit)?;
 	let private_nonce = b.private_nonce(secp, &commit)?;
 	let message = b.proof_message(secp, key_id, switch)?;
-	Ok(secp.bullet_proof(
+	Ok(secp.bullet_proof_with_generator(
 		amount,
 		skey,
 		rewind_nonce,
 		private_nonce,
 		extra_data,
 		Some(message),
+		asset.into(),
 	))
 }
 
@@ -63,8 +67,9 @@ pub fn verify(
 	commit: Commitment,
 	proof: RangeProof,
 	extra_data: Option<Vec<u8>>,
+	asset: Asset,
 ) -> Result<(), secp::Error> {
-	let result = secp.verify_bullet_proof(commit, proof, extra_data);
+	let result = secp.verify_bullet_proof_with_generator(commit, proof, extra_data, asset.into());
 	result.map(|_| ())
 }
 
@@ -75,6 +80,7 @@ pub fn rewind<B>(
 	commit: Commitment,
 	extra_data: Option<Vec<u8>>,
 	proof: RangeProof,
+	asset: Asset,
 ) -> Result<Option<(u64, Identifier, SwitchCommitmentType)>, Error>
 where
 	B: ProofBuild,
@@ -82,7 +88,8 @@ where
 	let nonce = b
 		.rewind_nonce(secp, &commit)
 		.map_err(|e| ErrorKind::RangeProof(e.to_string()))?;
-	let info = secp.rewind_bullet_proof(commit, nonce, extra_data, proof);
+	let info =
+		secp.rewind_bullet_proof_with_generator(commit, nonce, extra_data, proof, asset.into());
 	if info.is_err() {
 		return Ok(None);
 	}
@@ -90,7 +97,7 @@ where
 
 	let amount = info.value;
 	let check = b
-		.check_output(secp, &commit, amount, info.message)
+		.check_output(secp, &commit, amount, info.message, asset)
 		.map_err(|e| ErrorKind::RangeProof(e.to_string()))?;
 
 	Ok(check.map(|(id, switch)| (amount, id, switch)))
@@ -119,6 +126,7 @@ pub trait ProofBuild {
 		commit: &Commitment,
 		amount: u64,
 		message: ProofMessage,
+		asset: Asset,
 	) -> Result<Option<(Identifier, SwitchCommitmentType)>, Error>;
 }
 
@@ -205,6 +213,7 @@ where
 		commit: &Commitment,
 		amount: u64,
 		message: ProofMessage,
+		asset: Asset,
 	) -> Result<Option<(Identifier, SwitchCommitmentType)>, Error> {
 		if message.len() != 20 {
 			return Ok(None);
@@ -221,7 +230,7 @@ where
 		let depth = u8::min(msg[3], 4);
 		let id = Identifier::from_serialized_path(depth, &msg[4..]);
 
-		let commit_exp = self.keychain.commit(amount, &id, switch)?;
+		let commit_exp = self.keychain.commit(amount, &id, &switch, asset.into())?;
 		if commit == &commit_exp {
 			Ok(Some((id, switch)))
 		} else {
@@ -315,6 +324,7 @@ where
 		commit: &Commitment,
 		amount: u64,
 		message: ProofMessage,
+		asset: Asset,
 	) -> Result<Option<(Identifier, SwitchCommitmentType)>, Error> {
 		if message.len() != 20 {
 			return Ok(None);
@@ -327,9 +337,9 @@ where
 			return Ok(None);
 		}
 
-		let commit_exp = self
-			.keychain
-			.commit(amount, &id, SwitchCommitmentType::Regular)?;
+		let commit_exp =
+			self.keychain
+				.commit(amount, &id, SwitchCommitmentType::Regular, asset.into())?;
 		if commit == &commit_exp {
 			Ok(Some((id, SwitchCommitmentType::Regular)))
 		} else {
@@ -382,6 +392,7 @@ impl ProofBuild for ViewKey {
 		commit: &Commitment,
 		amount: u64,
 		message: ProofMessage,
+		_asset: Asset,
 	) -> Result<Option<(Identifier, SwitchCommitmentType)>, Error> {
 		if message.len() != 20 {
 			return Ok(None);
@@ -438,16 +449,20 @@ mod tests {
 
 	#[test]
 	fn legacy_builder() {
+		let asset = Asset::default();
 		let rng = &mut thread_rng();
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let builder = LegacyProofBuilder::new(&keychain);
 		let amount = rng.gen();
 		let id = ExtKeychain::derive_key_id(3, rng.gen(), rng.gen(), rng.gen(), 0);
 		let switch = SwitchCommitmentType::Regular;
-		let commit = keychain.commit(amount, &id, switch).unwrap();
-		let proof = create(&keychain, &builder, amount, &id, switch, commit, None).unwrap();
-		assert!(verify(&keychain.secp(), commit, proof, None).is_ok());
-		let rewind = rewind(keychain.secp(), &builder, commit, None, proof).unwrap();
+		let commit = keychain.commit(amount, &id, switch, asset.into()).unwrap();
+		let proof = create(
+			&keychain, &builder, amount, &id, switch, commit, None, asset,
+		)
+		.unwrap();
+		assert!(verify(&keychain.secp(), commit, proof, None, asset).is_ok());
+		let rewind = rewind(keychain.secp(), &builder, commit, None, proof, asset).unwrap();
 		assert!(rewind.is_some());
 		let (r_amount, r_id, r_switch) = rewind.unwrap();
 		assert_eq!(r_amount, amount);
@@ -457,6 +472,7 @@ mod tests {
 
 	#[test]
 	fn builder() {
+		let asset = Asset::default();
 		let rng = &mut thread_rng();
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let builder = ProofBuilder::new(&keychain);
@@ -465,10 +481,13 @@ mod tests {
 		// With switch commitment
 		let commit_a = {
 			let switch = SwitchCommitmentType::Regular;
-			let commit = keychain.commit(amount, &id, switch).unwrap();
-			let proof = create(&keychain, &builder, amount, &id, switch, commit, None).unwrap();
-			assert!(verify(&keychain.secp(), commit, proof, None).is_ok());
-			let rewind = rewind(keychain.secp(), &builder, commit, None, proof).unwrap();
+			let commit = keychain.commit(amount, &id, switch, asset.into()).unwrap();
+			let proof = create(
+				&keychain, &builder, amount, &id, switch, commit, None, asset,
+			)
+			.unwrap();
+			assert!(verify(&keychain.secp(), commit, proof, None, asset.into()).is_ok());
+			let rewind = rewind(keychain.secp(), &builder, commit, None, proof, asset).unwrap();
 			assert!(rewind.is_some());
 			let (r_amount, r_id, r_switch) = rewind.unwrap();
 			assert_eq!(r_amount, amount);
@@ -479,10 +498,35 @@ mod tests {
 		// Without switch commitment
 		let commit_b = {
 			let switch = SwitchCommitmentType::None;
-			let commit = keychain.commit(amount, &id, switch).unwrap();
-			let proof = create(&keychain, &builder, amount, &id, switch, commit, None).unwrap();
-			assert!(verify(&keychain.secp(), commit, proof, None).is_ok());
-			let rewind = rewind(keychain.secp(), &builder, commit, None, proof).unwrap();
+			let commit = keychain.commit(amount, &id, &switch, asset.into()).unwrap();
+			let proof = create(
+				&keychain,
+				&builder,
+				amount,
+				&id,
+				&switch,
+				commit.clone(),
+				None,
+				asset,
+			)
+			.unwrap();
+			assert!(verify(
+				&keychain.secp(),
+				commit.clone(),
+				proof.clone(),
+				None,
+				asset.into()
+			)
+			.is_ok());
+			let rewind = rewind(
+				keychain.secp(),
+				&builder,
+				commit.clone(),
+				None,
+				proof,
+				asset,
+			)
+			.unwrap();
 			assert!(rewind.is_some());
 			let (r_amount, r_id, r_switch) = rewind.unwrap();
 			assert_eq!(r_amount, amount);
@@ -528,6 +572,7 @@ mod tests {
 
 	#[test]
 	fn view_key_no_switch() {
+		let asset = Asset::default();
 		let rng = &mut thread_rng();
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 
@@ -546,12 +591,29 @@ mod tests {
 			0,
 		);
 		let switch = SwitchCommitmentType::None;
-		let commit = keychain.commit(amount, &id, switch).unwrap();
+		let commit = keychain.commit(amount, &id, &switch, asset.into()).unwrap();
 
 		// Generate proof with ProofBuilder..
-		let proof = create(&keychain, &builder, amount, &id, switch, commit, None).unwrap();
+		let proof = create(
+			&keychain,
+			&builder,
+			amount,
+			&id,
+			&switch,
+			commit.clone(),
+			None,
+			asset,
+		)
+		.unwrap();
 		// ..and rewind with ViewKey
-		let rewind = rewind(keychain.secp(), &view_key, commit, None, proof);
+		let rewind = rewind(
+			keychain.secp(),
+			&view_key,
+			commit.clone(),
+			None,
+			proof,
+			asset,
+		);
 
 		assert!(rewind.is_ok());
 		let rewind = rewind.unwrap();
@@ -564,6 +626,7 @@ mod tests {
 
 	#[test]
 	fn view_key_hardened() {
+		let asset = Asset::default();
 		let rng = &mut thread_rng();
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 
@@ -582,12 +645,29 @@ mod tests {
 			0,
 		);
 		let switch = SwitchCommitmentType::None;
-		let commit = keychain.commit(amount, &id, switch).unwrap();
+		let commit = keychain.commit(amount, &id, &switch, asset.into()).unwrap();
 
 		// Generate proof with ProofBuilder..
-		let proof = create(&keychain, &builder, amount, &id, switch, commit, None).unwrap();
+		let proof = create(
+			&keychain,
+			&builder,
+			amount,
+			&id,
+			&switch,
+			commit.clone(),
+			None,
+			asset,
+		)
+		.unwrap();
 		// ..and rewind with ViewKey
-		let rewind = rewind(keychain.secp(), &view_key, commit, None, proof);
+		let rewind = rewind(
+			keychain.secp(),
+			&view_key,
+			commit.clone(),
+			None,
+			proof,
+			asset,
+		);
 
 		assert!(rewind.is_ok());
 		let rewind = rewind.unwrap();
@@ -596,6 +676,7 @@ mod tests {
 
 	#[test]
 	fn view_key_child() {
+		let asset = Asset::default();
 		let rng = &mut thread_rng();
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 
@@ -625,12 +706,29 @@ mod tests {
 				0,
 			);
 			let switch = SwitchCommitmentType::None;
-			let commit = keychain.commit(amount, &id, switch).unwrap();
+			let commit = keychain.commit(amount, &id, &switch, asset.into()).unwrap();
 
 			// Generate proof with ProofBuilder..
-			let proof = create(&keychain, &builder, amount, &id, switch, commit, None).unwrap();
+			let proof = create(
+				&keychain,
+				&builder,
+				amount,
+				&id,
+				&switch,
+				commit.clone(),
+				None,
+				asset,
+			)
+			.unwrap();
 			// ..and rewind with child ViewKey
-			let rewind = rewind(keychain.secp(), &child_view_key, commit, None, proof);
+			let rewind = rewind(
+				keychain.secp(),
+				&child_view_key,
+				commit.clone(),
+				None,
+				proof,
+				asset,
+			);
 
 			assert!(rewind.is_ok());
 			let rewind = rewind.unwrap();
@@ -661,12 +759,29 @@ mod tests {
 				0,
 			);
 			let switch = SwitchCommitmentType::None;
-			let commit = keychain.commit(amount, &id, switch).unwrap();
+			let commit = keychain.commit(amount, &id, &switch, asset.into()).unwrap();
 
 			// Generate proof with ProofBuilder..
-			let proof = create(&keychain, &builder, amount, &id, switch, commit, None).unwrap();
+			let proof = create(
+				&keychain,
+				&builder,
+				amount,
+				&id,
+				&switch,
+				commit.clone(),
+				None,
+				asset,
+			)
+			.unwrap();
 			// ..and rewind with child ViewKey
-			let rewind = rewind(keychain.secp(), &child_view_key, commit, None, proof);
+			let rewind = rewind(
+				keychain.secp(),
+				&child_view_key,
+				commit.clone(),
+				None,
+				proof,
+				asset,
+			);
 
 			assert!(rewind.is_ok());
 			let rewind = rewind.unwrap();

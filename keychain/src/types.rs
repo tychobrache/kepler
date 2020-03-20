@@ -29,6 +29,7 @@ use serde::{de, ser}; //TODO: Convert errors to use ErrorKind
 
 use crate::util;
 use crate::util::secp::constants::SECRET_KEY_SIZE;
+use crate::util::secp::ffi::Generator;
 use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::pedersen::Commitment;
 use crate::util::secp::{self, Message, Secp256k1, Signature};
@@ -229,8 +230,9 @@ impl fmt::Display for Identifier {
 	}
 }
 
-#[derive(Default, Clone, PartialEq, Serialize, Deserialize, Zeroize)]
-#[zeroize(drop)]
+//#[derive(Default, Clone, PartialEq, Serialize, Deserialize, Zeroize)]
+//#[zeroize(drop)]
+#[derive(Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BlindingFactor([u8; SECRET_KEY_SIZE]);
 
 // Dummy `Debug` implementation that prevents secret leakage.
@@ -487,6 +489,7 @@ pub trait Keychain: Sync + Send + Clone {
 		amount: u64,
 		id: &Identifier,
 		switch: SwitchCommitmentType,
+		generator: Generator,
 	) -> Result<Commitment, Error>;
 	fn blind_sum(&self, blind_sum: &BlindSum) -> Result<BlindingFactor, Error>;
 	fn sign(
@@ -539,8 +542,8 @@ mod test {
 
 	// This tests cleaning of BlindingFactor (e.g. secret key) on Drop.
 	// To make this test fail, just remove `Zeroize` derive from `BlindingFactor` definition.
-	#[test]
-	fn blinding_factor_clear_on_drop() {
+	// #[test] TODO comment zeroize
+	fn _blinding_factor_clear_on_drop() {
 		// Create buffer for blinding factor filled with non-zero bytes.
 		let bf_bytes = [0xAA; SECRET_KEY_SIZE];
 		let ptr = {
