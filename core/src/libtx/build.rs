@@ -31,6 +31,7 @@
 //!   ]
 //! )
 
+use crate::core::asset::Asset;
 use crate::core::{Input, KernelFeatures, Output, OutputFeatures, Transaction, TxKernel};
 use crate::libtx::proof::{self, ProofBuild};
 use crate::libtx::{aggsig, Error};

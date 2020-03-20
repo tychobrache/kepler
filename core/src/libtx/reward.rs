@@ -14,7 +14,6 @@
 
 //! Builds the blinded output and related signature proof for the block
 //! reward.
-use kepler_keychain::SwitchCommitmentType;
 
 use crate::consensus::reward;
 use crate::core::{KernelFeatures, Output, OutputFeatures, TxKernel};

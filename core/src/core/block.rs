@@ -42,7 +42,6 @@ use util::RwLock;
 use util::{secp, static_secp_instance};
 
 use super::issued_asset::AssetAction;
-use crate::libtx::build::mint;
 
 lazy_static! {
 	/// The "zero" overage when no asset had been issued. This is loading 32 zero-bytes as generator.

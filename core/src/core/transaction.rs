@@ -39,7 +39,6 @@ use util::RwLock;
 
 use crate::core::asset::Asset;
 use crate::core::issued_asset::AssetAction;
-use crate::core::Error::InvalidAmountString;
 
 /// Various tx kernel variants.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

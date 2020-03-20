@@ -230,7 +230,7 @@ where
 		let depth = u8::min(msg[3], 4);
 		let id = Identifier::from_serialized_path(depth, &msg[4..]);
 
-		let commit_exp = self.keychain.commit(amount, &id, &switch, asset.into())?;
+		let commit_exp = self.keychain.commit(amount, &id, switch, asset.into())?;
 		if commit == &commit_exp {
 			Ok(Some((id, switch)))
 		} else {
@@ -498,13 +498,13 @@ mod tests {
 		// Without switch commitment
 		let commit_b = {
 			let switch = SwitchCommitmentType::None;
-			let commit = keychain.commit(amount, &id, &switch, asset.into()).unwrap();
+			let commit = keychain.commit(amount, &id, switch, asset.into()).unwrap();
 			let proof = create(
 				&keychain,
 				&builder,
 				amount,
 				&id,
-				&switch,
+				switch,
 				commit.clone(),
 				None,
 				asset,
@@ -591,7 +591,7 @@ mod tests {
 			0,
 		);
 		let switch = SwitchCommitmentType::None;
-		let commit = keychain.commit(amount, &id, &switch, asset.into()).unwrap();
+		let commit = keychain.commit(amount, &id, switch, asset.into()).unwrap();
 
 		// Generate proof with ProofBuilder..
 		let proof = create(
@@ -599,7 +599,7 @@ mod tests {
 			&builder,
 			amount,
 			&id,
-			&switch,
+			switch,
 			commit.clone(),
 			None,
 			asset,
@@ -645,7 +645,7 @@ mod tests {
 			0,
 		);
 		let switch = SwitchCommitmentType::None;
-		let commit = keychain.commit(amount, &id, &switch, asset.into()).unwrap();
+		let commit = keychain.commit(amount, &id, switch, asset.into()).unwrap();
 
 		// Generate proof with ProofBuilder..
 		let proof = create(
@@ -653,7 +653,7 @@ mod tests {
 			&builder,
 			amount,
 			&id,
-			&switch,
+			switch,
 			commit.clone(),
 			None,
 			asset,
@@ -706,7 +706,7 @@ mod tests {
 				0,
 			);
 			let switch = SwitchCommitmentType::None;
-			let commit = keychain.commit(amount, &id, &switch, asset.into()).unwrap();
+			let commit = keychain.commit(amount, &id, switch, asset.into()).unwrap();
 
 			// Generate proof with ProofBuilder..
 			let proof = create(
@@ -714,7 +714,7 @@ mod tests {
 				&builder,
 				amount,
 				&id,
-				&switch,
+				switch,
 				commit.clone(),
 				None,
 				asset,
@@ -759,7 +759,7 @@ mod tests {
 				0,
 			);
 			let switch = SwitchCommitmentType::None;
-			let commit = keychain.commit(amount, &id, &switch, asset.into()).unwrap();
+			let commit = keychain.commit(amount, &id, switch, asset.into()).unwrap();
 
 			// Generate proof with ProofBuilder..
 			let proof = create(
@@ -767,7 +767,7 @@ mod tests {
 				&builder,
 				amount,
 				&id,
-				&switch,
+				switch,
 				commit.clone(),
 				None,
 				asset,
