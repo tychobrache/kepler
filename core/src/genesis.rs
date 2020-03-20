@@ -20,6 +20,7 @@
 #![cfg_attr(feature = "cargo-clippy", allow(clippy::unreadable_literal))]
 
 use crate::core;
+use crate::core::asset::Asset;
 use crate::core::hash::Hash;
 use crate::pow::{Difficulty, Proof, ProofOfWork};
 use chrono::prelude::{TimeZone, Utc};
@@ -156,6 +157,7 @@ pub fn genesis_floo() -> core::Block {
 				146, 89, 203, 114, 86, 116, 128, 83, 121, 128,
 			],
 		},
+		asset: Asset::default(),
 	};
 	gen.with_reward(output, kernel)
 }
@@ -272,6 +274,7 @@ pub fn genesis_main() -> core::Block {
 				146, 89, 203, 114, 86, 116, 128, 83, 121, 128,
 			],
 		},
+		asset: Asset::default(),
 	};
 	gen.with_reward(output, kernel)
 }
@@ -294,7 +297,7 @@ mod test {
 		);
 		assert_eq!(
 			gen_bin.hash().to_hex(),
-			"c0fd577221d9c4421aea501ab011c94a0df1598eb4fee9fb3f402d4e5f9690d3"
+			"c13086573772b53bb3d074ebd633c67c87f4a9a197936077851b73853dc60ee0"
 		);
 	}
 
@@ -310,7 +313,7 @@ mod test {
 		);
 		assert_eq!(
 			gen_bin.hash().to_hex(),
-			"d6b31a6abc2700977ec3a6554aaee0d5a007f0785655cbbb838b1a9d0c102210"
+			"239de6437d03edbc9808f6553af129fa329c0e5cc95dc38fba273d2af165c635"
 		);
 	}
 }

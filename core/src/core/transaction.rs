@@ -27,6 +27,7 @@ use enum_primitive::FromPrimitive;
 use keychain::{self, BlindingFactor};
 use std::cmp::Ordering;
 use std::cmp::{max, min};
+use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::{error, fmt};
@@ -35,6 +36,10 @@ use util::secp;
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::static_secp_instance;
 use util::RwLock;
+
+use crate::core::asset::Asset;
+use crate::core::issued_asset::AssetAction;
+use crate::core::Error::InvalidAmountString;
 
 /// Various tx kernel variants.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -248,6 +253,8 @@ pub enum Error {
 	InvalidKernelFeatures,
 	/// Signature verification error.
 	IncorrectSignature,
+	/// Duplicate asset actions with the same base point
+	DuplicateAssetPoints,
 	/// Underlying serialization error.
 	Serialization(ser::Error),
 }
@@ -503,7 +510,15 @@ pub struct TransactionBody {
 	pub outputs: Vec<Output>,
 	/// List of kernels that make up this transaction (usually a single kernel).
 	pub kernels: Vec<TxKernel>,
+	/// List of issued asset action
+	pub assets: Vec<AssetAction>,
 }
+
+// #[derive(Copy, Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+// pub struct MintAction {
+// 	pub supply: u128,
+// 	pub asset: Asset,
+// }
 
 /// PartialEq
 impl PartialEq for TransactionBody {
@@ -516,16 +531,25 @@ impl PartialEq for TransactionBody {
 /// write the body as binary.
 impl Writeable for TransactionBody {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		let assets_vec = bincode::serialize(&self.assets).map_err(|_| {
+			ser::Error::IOErr(
+				"asset action deserialize error".to_owned(),
+				std::io::ErrorKind::InvalidInput,
+			)
+		})?;
+
 		ser_multiwrite!(
 			writer,
 			[write_u64, self.inputs.len() as u64],
 			[write_u64, self.outputs.len() as u64],
-			[write_u64, self.kernels.len() as u64]
+			[write_u64, self.kernels.len() as u64],
+			[write_u64, assets_vec.len() as u64]
 		);
 
 		self.inputs.write(writer)?;
 		self.outputs.write(writer)?;
 		self.kernels.write(writer)?;
+		writer.write_fixed_bytes(&assets_vec)?;
 
 		Ok(())
 	}
@@ -535,8 +559,8 @@ impl Writeable for TransactionBody {
 /// body from a binary stream.
 impl Readable for TransactionBody {
 	fn read(reader: &mut dyn Reader) -> Result<TransactionBody, ser::Error> {
-		let (input_len, output_len, kernel_len) =
-			ser_multiread!(reader, read_u64, read_u64, read_u64);
+		let (input_len, output_len, kernel_len, assets_len) =
+			ser_multiread!(reader, read_u64, read_u64, read_u64, read_u64);
 
 		// Quick block weight check before proceeding.
 		// Note: We use weight_as_block here (inputs have weight).
@@ -544,8 +568,8 @@ impl Readable for TransactionBody {
 			input_len as usize,
 			output_len as usize,
 			kernel_len as usize,
+			assets_len as usize,
 		);
-
 		if tx_block_weight > global::max_block_weight() {
 			return Err(ser::Error::TooLargeReadErr);
 		}
@@ -553,9 +577,17 @@ impl Readable for TransactionBody {
 		let inputs = read_multi(reader, input_len)?;
 		let outputs = read_multi(reader, output_len)?;
 		let kernels = read_multi(reader, kernel_len)?;
+		let assets_vec = read_multi(reader, assets_len)?;
+
+		let assets = bincode::deserialize::<Vec<AssetAction>>(&assets_vec[..]).map_err(|_| {
+			ser::Error::IOErr(
+				"asset action deserialize error".to_owned(),
+				std::io::ErrorKind::InvalidInput,
+			)
+		})?;
 
 		// Initialize tx body and verify everything is sorted.
-		let body = TransactionBody::init(inputs, outputs, kernels, true)
+		let body = TransactionBody::init(inputs, outputs, kernels, assets, true)
 			.map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(body)
@@ -589,6 +621,7 @@ impl TransactionBody {
 			inputs: vec![],
 			outputs: vec![],
 			kernels: vec![],
+			assets: vec![],
 		}
 	}
 
@@ -606,12 +639,14 @@ impl TransactionBody {
 		inputs: Vec<Input>,
 		outputs: Vec<Output>,
 		kernels: Vec<TxKernel>,
+		assets: Vec<AssetAction>,
 		verify_sorted: bool,
 	) -> Result<TransactionBody, Error> {
 		let mut body = TransactionBody {
 			inputs,
 			outputs,
 			kernels,
+			assets,
 		};
 
 		if verify_sorted {
@@ -655,6 +690,14 @@ impl TransactionBody {
 		self
 	}
 
+	pub fn with_asset(mut self, asset: AssetAction) -> TransactionBody {
+		if !self.assets.contains(&asset) {
+			self.assets.push(asset);
+		}
+
+		self
+	}
+
 	/// Builds a new TransactionBody replacing any existing kernels with the provided kernel.
 	pub fn replace_kernel(mut self, kernel: TxKernel) -> TransactionBody {
 		self.kernels.clear();
@@ -679,6 +722,39 @@ impl TransactionBody {
 		self.fee() as i64
 	}
 
+	pub fn mint_overage(&self) -> Result<Option<Commitment>, Error> {
+		// created non-blinded commitments for all minting assets
+		//
+		// A, B, C, ...
+		// C_a = A * supply_a + 0 * G
+		// C_b = B * supply_b + 0 * G
+		// C_c = C * supply_c + 0 * G
+		// ...
+		// mint_overage = C_a + C_b + C_c + ...
+		let secp = static_secp_instance();
+		let secp = secp.lock();
+
+		let mut commitments = vec![];
+		for asset_action in self.assets.iter() {
+			commitments.push(
+				secp.commit_value_with_generator(
+					asset_action.amount(),
+					asset_action.asset().into(),
+				)
+				.map_err(|_| Error::AggregationError)?,
+			);
+		}
+
+		if commitments.len() == 0 {
+			return Ok(None);
+		}
+
+		// FIXME: fix unwrap
+		secp.commit_sum(commitments, vec![])
+			.map(|c| Some(c))
+			.map_err(|_| Error::AggregationError)
+	}
+
 	/// Calculate transaction weight
 	pub fn body_weight(&self) -> usize {
 		TransactionBody::weight(self.inputs.len(), self.outputs.len(), self.kernels.len())
@@ -686,7 +762,14 @@ impl TransactionBody {
 
 	/// Calculate weight of transaction using block weighing
 	pub fn body_weight_as_block(&self) -> usize {
-		TransactionBody::weight_as_block(self.inputs.len(), self.outputs.len(), self.kernels.len())
+		let assets_vec = bincode::serialize(&self.assets).unwrap();
+
+		TransactionBody::weight_as_block(
+			self.inputs.len(),
+			self.outputs.len(),
+			self.kernels.len(),
+			assets_vec.len(),
+		)
 	}
 
 	/// Calculate transaction weight from transaction details. This is non
@@ -702,11 +785,17 @@ impl TransactionBody {
 
 	/// Calculate transaction weight using block weighing from transaction
 	/// details. Consensus critical and uses consensus weight values.
-	pub fn weight_as_block(input_len: usize, output_len: usize, kernel_len: usize) -> usize {
+	pub fn weight_as_block(
+		input_len: usize,
+		output_len: usize,
+		kernel_len: usize,
+		assets_len: usize,
+	) -> usize {
 		input_len
 			.saturating_mul(consensus::BLOCK_INPUT_WEIGHT)
 			.saturating_add(output_len.saturating_mul(consensus::BLOCK_OUTPUT_WEIGHT))
 			.saturating_add(kernel_len.saturating_mul(consensus::BLOCK_KERNEL_WEIGHT))
+			.saturating_add(assets_len)
 	}
 
 	/// Lock height of a body is the max lock height of the kernels.
@@ -809,6 +898,23 @@ impl TransactionBody {
 		Ok(())
 	}
 
+	fn verify_asset_actions_nodup(&self) -> Result<(), Error> {
+		if self.assets.len() < 2 {
+			return Ok(());
+		}
+		let mut uniq = HashSet::new();
+		let nodup = self
+			.assets
+			.iter()
+			.filter(|action| action.is_new())
+			.all(|action| uniq.insert(action.asset()));
+		if !nodup {
+			return Err(Error::DuplicateAssetPoints);
+		}
+
+		Ok(())
+	}
+
 	/// "Lightweight" validation that we can perform quickly during read/deserialization.
 	/// Subset of full validation that skips expensive verification steps, specifically -
 	/// * rangeproof verification
@@ -817,7 +923,20 @@ impl TransactionBody {
 		self.verify_weight(weighting)?;
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
+
+		self.verify_asset_actions_nodup()?;
+
 		Ok(())
+	}
+
+	pub fn validate_asset_actions(&self) -> Result<(), Error> {
+		let ok = self.assets.iter().all(|action| action.validate());
+
+		if !ok {
+			Err(Error::IncorrectSignature)
+		} else {
+			Ok(())
+		}
 	}
 
 	/// Validates all relevant parts of a transaction body. Checks the
@@ -830,6 +949,8 @@ impl TransactionBody {
 	) -> Result<(), Error> {
 		self.validate_read(weighting)?;
 
+		self.validate_asset_actions()?;
+
 		// Find all the outputs that have not had their rangeproofs verified.
 		let outputs = {
 			let mut verifier = verifier.write();
@@ -838,13 +959,21 @@ impl TransactionBody {
 
 		// Now batch verify all those unverified rangeproofs
 		if !outputs.is_empty() {
-			let mut commits = vec![];
-			let mut proofs = vec![];
+			let mut all_commits: HashMap<Asset, (Vec<Commitment>, Vec<RangeProof>)> =
+				HashMap::new();
 			for x in &outputs {
-				commits.push(x.commit);
-				proofs.push(x.proof);
+				all_commits
+					.entry(x.asset)
+					.and_modify(|cr| {
+						cr.0.push(x.commit);
+						cr.1.push(x.proof);
+					})
+					.or_insert((vec![x.commit], vec![x.proof]));
 			}
-			Output::batch_verify_proofs(&commits, &proofs)?;
+
+			for (asset, (commits, proofs)) in all_commits.iter() {
+				Output::batch_verify_proofs(&commits, &proofs, &asset)?;
+			}
 		}
 
 		// Find all the kernels that have not yet been verified.
@@ -954,12 +1083,17 @@ impl Transaction {
 
 	/// Creates a new transaction initialized with
 	/// the provided inputs, outputs, kernels
-	pub fn new(inputs: Vec<Input>, outputs: Vec<Output>, kernels: Vec<TxKernel>) -> Transaction {
+	pub fn new(
+		inputs: Vec<Input>,
+		outputs: Vec<Output>,
+		kernels: Vec<TxKernel>,
+		assets: Vec<AssetAction>,
+	) -> Transaction {
 		let offset = BlindingFactor::zero();
 
 		// Initialize a new tx body and sort everything.
-		let body =
-			TransactionBody::init(inputs, outputs, kernels, false).expect("sorting, not verifying");
+		let body = TransactionBody::init(inputs, outputs, kernels, assets, false)
+			.expect("sorting, not verifying");
 
 		Transaction { offset, body }
 	}
@@ -1008,6 +1142,13 @@ impl Transaction {
 		}
 	}
 
+	pub fn with_asset(self, asset: AssetAction) -> Transaction {
+		Transaction {
+			body: self.body.with_asset(asset),
+			..self
+		}
+	}
+
 	/// Get inputs
 	pub fn inputs(&self) -> &Vec<Input> {
 		&self.body.inputs
@@ -1031,6 +1172,10 @@ impl Transaction {
 	/// Get kernels
 	pub fn kernels(&self) -> &Vec<TxKernel> {
 		&self.body.kernels
+	}
+
+	pub fn assets(&self) -> &Vec<AssetAction> {
+		&self.body.assets
 	}
 
 	/// Get kernels mut
@@ -1074,7 +1219,11 @@ impl Transaction {
 	) -> Result<(), Error> {
 		self.body.validate(weighting, verifier)?;
 		self.body.verify_features()?;
-		self.verify_kernel_sums(self.overage(), self.offset.clone())?;
+		self.verify_kernel_sums(
+			self.overage(),
+			self.body.mint_overage()?,
+			self.offset.clone(),
+		)?;
 		Ok(())
 	}
 
@@ -1148,15 +1297,18 @@ pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 	let mut n_inputs = 0;
 	let mut n_outputs = 0;
 	let mut n_kernels = 0;
+	let mut n_assets = 0;
 	for tx in txs.iter() {
 		n_inputs += tx.body.inputs.len();
 		n_outputs += tx.body.outputs.len();
 		n_kernels += tx.body.kernels.len();
+		n_assets += tx.body.assets.len();
 	}
 
 	let mut inputs: Vec<Input> = Vec::with_capacity(n_inputs);
 	let mut outputs: Vec<Output> = Vec::with_capacity(n_outputs);
 	let mut kernels: Vec<TxKernel> = Vec::with_capacity(n_kernels);
+	let mut assets: Vec<AssetAction> = Vec::with_capacity(n_assets);
 
 	// we will sum these together at the end to give us the overall offset for the
 	// transaction
@@ -1168,6 +1320,7 @@ pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 		inputs.append(&mut tx.body.inputs);
 		outputs.append(&mut tx.body.outputs);
 		kernels.append(&mut tx.body.kernels);
+		assets.append(&mut tx.body.assets);
 	}
 
 	// Sort inputs and outputs during cut_through.
@@ -1185,7 +1338,7 @@ pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 	//   * cut-through outputs
 	//   * full set of tx kernels
 	//   * sum of all kernel offsets
-	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
+	let tx = Transaction::new(inputs, outputs, kernels, assets).with_offset(total_kernel_offset);
 
 	Ok(tx)
 }
@@ -1196,6 +1349,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];
+	let mut assets: Vec<AssetAction> = vec![];
 
 	// we will subtract these at the end to give us the overall offset for the
 	// transaction
@@ -1216,6 +1370,12 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	for mk_kernel in mk_tx.body.kernels {
 		if !tx.body.kernels.contains(&mk_kernel) && !kernels.contains(&mk_kernel) {
 			kernels.push(mk_kernel);
+		}
+	}
+
+	for mk_asset in mk_tx.body.assets {
+		if !tx.body.assets.contains(&mk_asset) && !assets.contains(&mk_asset) {
+			assets.push(mk_asset);
 		}
 	}
 
@@ -1250,7 +1410,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	kernels.sort_unstable();
 
 	// Build a new tx from the above data.
-	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
+	let tx = Transaction::new(inputs, outputs, kernels, assets).with_offset(total_kernel_offset);
 	Ok(tx)
 }
 
@@ -1268,6 +1428,8 @@ pub struct Input {
 		deserialize_with = "secp_ser::commitment_from_hex"
 	)]
 	pub commit: Commitment,
+
+	pub asset: Asset,
 }
 
 impl DefaultHashable for Input {}
@@ -1287,6 +1449,7 @@ impl Writeable for Input {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.features.write(writer)?;
 		self.commit.write(writer)?;
+		self.asset.write(writer)?;
 		Ok(())
 	}
 }
@@ -1297,7 +1460,8 @@ impl Readable for Input {
 	fn read(reader: &mut dyn Reader) -> Result<Input, ser::Error> {
 		let features = OutputFeatures::read(reader)?;
 		let commit = Commitment::read(reader)?;
-		Ok(Input::new(features, commit))
+		let asset = Asset::read(reader)?;
+		Ok(Input::new(features, commit, asset))
 	}
 }
 
@@ -1308,8 +1472,12 @@ impl Readable for Input {
 impl Input {
 	/// Build a new input from the data required to identify and verify an
 	/// output being spent.
-	pub fn new(features: OutputFeatures, commit: Commitment) -> Input {
-		Input { features, commit }
+	pub fn new(features: OutputFeatures, commit: Commitment, asset: Asset) -> Input {
+		Input {
+			features,
+			commit,
+			asset,
+		}
 	}
 
 	/// The input commitment which _partially_ identifies the output being
@@ -1318,6 +1486,10 @@ impl Input {
 	/// calculate lock_height for coinbase outputs).
 	pub fn commitment(&self) -> Commitment {
 		self.commit
+	}
+
+	pub fn asset(&self) -> Asset {
+		self.asset
 	}
 
 	/// Is this a coinbase input?
@@ -1379,6 +1551,8 @@ pub struct Output {
 		deserialize_with = "secp_ser::rangeproof_from_hex"
 	)]
 	pub proof: RangeProof,
+
+	pub asset: Asset,
 }
 
 impl DefaultHashable for Output {}
@@ -1403,6 +1577,7 @@ impl Writeable for Output {
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			writer.write_bytes(&self.proof)?
 		}
+		self.asset.write(writer)?;
 		Ok(())
 	}
 }
@@ -1415,6 +1590,7 @@ impl Readable for Output {
 			features: OutputFeatures::read(reader)?,
 			commit: Commitment::read(reader)?,
 			proof: RangeProof::read(reader)?,
+			asset: Asset::read(reader)?,
 		})
 	}
 }
@@ -1454,6 +1630,11 @@ impl Output {
 		self.commit
 	}
 
+	/// this output asset
+	pub fn asset(&self) -> Asset {
+		self.asset
+	}
+
 	/// Is this a coinbase kernel?
 	pub fn is_coinbase(&self) -> bool {
 		self.features.is_coinbase()
@@ -1472,16 +1653,28 @@ impl Output {
 	/// Validates the range proof using the commitment
 	pub fn verify_proof(&self) -> Result<(), Error> {
 		let secp = static_secp_instance();
-		secp.lock()
-			.verify_bullet_proof(self.commit, self.proof, None)?;
+		secp.lock().verify_bullet_proof_with_generator(
+			self.commit,
+			self.proof,
+			None,
+			self.asset.into(),
+		)?;
 		Ok(())
 	}
 
 	/// Batch validates the range proofs using the commitments
-	pub fn batch_verify_proofs(commits: &[Commitment], proofs: &[RangeProof]) -> Result<(), Error> {
+	pub fn batch_verify_proofs(
+		commits: &Vec<Commitment>,
+		proofs: &Vec<RangeProof>,
+		asset: &Asset,
+	) -> Result<(), Error> {
 		let secp = static_secp_instance();
-		secp.lock()
-			.verify_bullet_proof_multi(commits.to_vec(), proofs.to_vec(), None)?;
+		secp.lock().verify_bullet_proof_multi_with_generator(
+			commits.clone(),
+			proofs.clone(),
+			None,
+			asset.into(),
+		)?;
 		Ok(())
 	}
 }
@@ -1497,16 +1690,18 @@ pub struct OutputIdentifier {
 	pub features: OutputFeatures,
 	/// Output commitment
 	pub commit: Commitment,
+	pub asset: Asset,
 }
 
 impl DefaultHashable for OutputIdentifier {}
 
 impl OutputIdentifier {
 	/// Build a new output_identifier.
-	pub fn new(features: OutputFeatures, commit: &Commitment) -> OutputIdentifier {
+	pub fn new(features: OutputFeatures, commit: &Commitment, asset: Asset) -> OutputIdentifier {
 		OutputIdentifier {
 			features,
 			commit: *commit,
+			asset: asset,
 		}
 	}
 
@@ -1520,6 +1715,7 @@ impl OutputIdentifier {
 		OutputIdentifier {
 			features: output.features,
 			commit: output.commit,
+			asset: output.asset,
 		}
 	}
 
@@ -1529,6 +1725,7 @@ impl OutputIdentifier {
 			proof,
 			features: self.features,
 			commit: self.commit,
+			asset: self.asset,
 		}
 	}
 
@@ -1537,15 +1734,17 @@ impl OutputIdentifier {
 		OutputIdentifier {
 			features: input.features,
 			commit: input.commit,
+			asset: input.asset,
 		}
 	}
 
 	/// convert an output_identifier to hex string format.
 	pub fn to_hex(&self) -> String {
 		format!(
-			"{:b}{}",
+			"{:b}{}{}",
 			self.features as u8,
 			util::to_hex(self.commit.0.to_vec()),
+			util::to_hex(self.asset.to_bytes().to_vec())
 		)
 	}
 }
@@ -1554,6 +1753,7 @@ impl Writeable for OutputIdentifier {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.features.write(writer)?;
 		self.commit.write(writer)?;
+		self.asset.write(writer)?;
 		Ok(())
 	}
 }
@@ -1563,6 +1763,7 @@ impl Readable for OutputIdentifier {
 		Ok(OutputIdentifier {
 			features: OutputFeatures::read(reader)?,
 			commit: Commitment::read(reader)?,
+			asset: Asset::read(reader)?,
 		})
 	}
 }
@@ -1572,6 +1773,7 @@ impl From<Output> for OutputIdentifier {
 		OutputIdentifier {
 			features: out.features,
 			commit: out.commit,
+			asset: out.asset,
 		}
 	}
 }
@@ -1586,10 +1788,11 @@ mod test {
 
 	#[test]
 	fn test_kernel_ser_deser() {
+		let asset = Asset::default();
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 		let commit = keychain
-			.commit(5, &key_id, SwitchCommitmentType::Regular)
+			.commit(5, &key_id, &SwitchCommitmentType::Regular, asset.into())
 			.unwrap();
 
 		// just some bytes for testing ser/deser
@@ -1634,16 +1837,17 @@ mod test {
 
 	#[test]
 	fn commit_consistency() {
+		let asset = Asset::default();
 		let keychain = ExtKeychain::from_seed(&[0; 32], false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 		let commit = keychain
-			.commit(1003, &key_id, SwitchCommitmentType::Regular)
+			.commit(1003, &key_id, &SwitchCommitmentType::Regular, asset.into())
 			.unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 		let commit_2 = keychain
-			.commit(1003, &key_id, SwitchCommitmentType::Regular)
+			.commit(1003, &key_id, &SwitchCommitmentType::Regular, asset.into())
 			.unwrap();
 
 		assert!(commit == commit_2);
@@ -1651,15 +1855,17 @@ mod test {
 
 	#[test]
 	fn input_short_id() {
+		let asset = Asset::default();
 		let keychain = ExtKeychain::from_seed(&[0; 32], false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 		let commit = keychain
-			.commit(5, &key_id, SwitchCommitmentType::Regular)
+			.commit(5, &key_id, &SwitchCommitmentType::Regular, asset.into())
 			.unwrap();
 
 		let input = Input {
 			features: OutputFeatures::Plain,
-			commit,
+			commit: commit,
+			asset: asset,
 		};
 
 		let block_hash =
@@ -1669,17 +1875,18 @@ mod test {
 		let nonce = 0;
 
 		let short_id = input.short_id(&block_hash, nonce);
-		assert_eq!(short_id, ShortId::from_hex("c4b05f2ba649").unwrap());
+		assert_eq!(short_id, ShortId::from_hex("8291175799d0").unwrap());
 
 		// now generate the short_id for a *very* similar output (single feature flag
 		// different) and check it generates a different short_id
 		let input = Input {
 			features: OutputFeatures::Coinbase,
-			commit,
+			commit: commit,
+			asset: Asset::default(),
 		};
 
 		let short_id = input.short_id(&block_hash, nonce);
-		assert_eq!(short_id, ShortId::from_hex("3f0377c624e9").unwrap());
+		assert_eq!(short_id, ShortId::from_hex("a5f15c64ecde").unwrap());
 	}
 
 	#[test]

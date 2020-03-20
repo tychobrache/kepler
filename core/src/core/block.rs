@@ -20,8 +20,8 @@ use crate::core::compact_block::{CompactBlock, CompactBlockBody};
 use crate::core::hash::{DefaultHashable, Hash, Hashed, ZERO_HASH};
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{
-	transaction, Commitment, Input, KernelFeatures, Output, Transaction, TransactionBody, TxKernel,
-	Weighting,
+	asset::Asset, transaction, Commitment, Input, KernelFeatures, Output, Transaction,
+	TransactionBody, TxKernel, Weighting,
 };
 use crate::global;
 use crate::pow::{verify_size, Difficulty, Proof, ProofOfWork};
@@ -40,6 +40,19 @@ use std::sync::Arc;
 use util::from_hex;
 use util::RwLock;
 use util::{secp, static_secp_instance};
+
+use super::issued_asset::AssetAction;
+use crate::libtx::build::mint;
+
+lazy_static! {
+	/// The "zero" overage when no asset had been issued. This is loading 32 zero-bytes as generator.
+	/// [0u8;32]*G isn't the infinity/zero point.
+	pub static ref ZERO_OVERAGE_COMMITMENT: Commitment = {
+		let secp = static_secp_instance();
+		let secp = secp.lock();
+		secp.commit_value_with_generator(0, Asset::default().into()).unwrap()
+	};
+}
 
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, Eq, PartialEq, Fail)]
@@ -217,6 +230,8 @@ pub struct BlockHeader {
 	pub range_proof_root: Hash,
 	/// Merklish root of all transaction kernels in the TxHashSet
 	pub kernel_root: Hash,
+	/// Merklish root of all assets in the TxHashSet
+	pub issue_root: Hash,
 	/// Total accumulated sum of kernel offsets since genesis block.
 	/// We can derive the kernel offset sum for *this* block from
 	/// the total kernel offset of the previous block header.
@@ -225,6 +240,12 @@ pub struct BlockHeader {
 	pub output_mmr_size: u64,
 	/// Total size of the kernel MMR after applying this block
 	pub kernel_mmr_size: u64,
+
+	/// Total size of the issued assets MMR after applying this block
+	pub issue_mmr_size: u64,
+
+	pub total_issue_overage: Commitment,
+
 	/// Proof of work and related
 	pub pow: ProofOfWork,
 }
@@ -241,9 +262,12 @@ impl Default for BlockHeader {
 			output_root: ZERO_HASH,
 			range_proof_root: ZERO_HASH,
 			kernel_root: ZERO_HASH,
+			issue_root: ZERO_HASH,
 			total_kernel_offset: BlindingFactor::zero(),
+			total_issue_overage: *ZERO_OVERAGE_COMMITMENT,
 			output_mmr_size: 0,
 			kernel_mmr_size: 0,
+			issue_mmr_size: 0,
 			pow: ProofOfWork::default(),
 		}
 	}
@@ -288,8 +312,11 @@ fn read_block_header(reader: &mut dyn Reader) -> Result<BlockHeader, ser::Error>
 	let output_root = Hash::read(reader)?;
 	let range_proof_root = Hash::read(reader)?;
 	let kernel_root = Hash::read(reader)?;
+	let issue_root = Hash::read(reader)?;
 	let total_kernel_offset = BlindingFactor::read(reader)?;
-	let (output_mmr_size, kernel_mmr_size) = ser_multiread!(reader, read_u64, read_u64);
+	let (output_mmr_size, kernel_mmr_size, issue_mmr_size) =
+		ser_multiread!(reader, read_u64, read_u64, read_u64);
+	let total_issue_overage = Commitment::read(reader)?;
 	let pow = ProofOfWork::read(reader)?;
 
 	if timestamp > MAX_DATE.and_hms(0, 0, 0).timestamp()
@@ -307,9 +334,12 @@ fn read_block_header(reader: &mut dyn Reader) -> Result<BlockHeader, ser::Error>
 		output_root,
 		range_proof_root,
 		kernel_root,
+		issue_root,
 		total_kernel_offset,
 		output_mmr_size,
 		kernel_mmr_size,
+		issue_mmr_size,
+		total_issue_overage,
 		pow,
 	})
 }
@@ -322,6 +352,18 @@ impl Readable for BlockHeader {
 }
 
 impl BlockHeader {
+	pub fn add_issue_overage(&self, issue_overage: Commitment) -> Result<Commitment, Error> {
+		let new_overage = if self.total_issue_overage == *ZERO_OVERAGE_COMMITMENT {
+			issue_overage
+		} else {
+			let secp = static_secp_instance();
+			let secp = secp.lock();
+			secp.commit_sum(vec![self.total_issue_overage, issue_overage], vec![])?
+		};
+
+		return Ok(new_overage);
+	}
+
 	/// Write the pre-hash portion of the header
 	pub fn write_pre_pow<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.version.write(writer)?;
@@ -334,10 +376,13 @@ impl BlockHeader {
 			[write_fixed_bytes, &self.output_root],
 			[write_fixed_bytes, &self.range_proof_root],
 			[write_fixed_bytes, &self.kernel_root],
+			[write_fixed_bytes, &self.issue_root],
 			[write_fixed_bytes, &self.total_kernel_offset],
 			[write_u64, self.output_mmr_size],
-			[write_u64, self.kernel_mmr_size]
+			[write_u64, self.kernel_mmr_size],
+			[write_u64, self.issue_mmr_size]
 		);
+		self.total_issue_overage.write(writer)?;
 		Ok(())
 	}
 
@@ -563,6 +608,7 @@ impl Block {
 		let mut all_inputs = HashSet::new();
 		let mut all_outputs = HashSet::new();
 		let mut all_kernels = HashSet::new();
+		let mut all_assets = HashSet::new();
 
 		// collect all the inputs, outputs and kernels from the txs
 		for tx in txs {
@@ -570,6 +616,7 @@ impl Block {
 			all_inputs.extend(tb.inputs);
 			all_outputs.extend(tb.outputs);
 			all_kernels.extend(tb.kernels);
+			all_assets.extend(tb.assets);
 		}
 
 		// include the coinbase output(s) and kernel(s) from the compact_block
@@ -583,9 +630,10 @@ impl Block {
 		let all_inputs = Vec::from_iter(all_inputs);
 		let all_outputs = Vec::from_iter(all_outputs);
 		let all_kernels = Vec::from_iter(all_kernels);
+		let all_assets = Vec::from_iter(all_assets);
 
 		// Initialize a tx body and sort everything.
-		let body = TransactionBody::init(all_inputs, all_outputs, all_kernels, false)?;
+		let body = TransactionBody::init(all_inputs, all_outputs, all_kernels, all_assets, false)?;
 
 		// Finally return the full block.
 		// Note: we have not actually validated the block here,
@@ -624,7 +672,13 @@ impl Block {
 			vec![],
 		)?;
 
+		let total_issue_overage = if let Some(issue_overage) = agg_tx.body.mint_overage()? {
+			prev.add_issue_overage(issue_overage)?
+		} else {
+			prev.total_issue_overage
+		};
 		// Determine the height and associated version for the new header.
+
 		let height = prev.height + 1;
 		let version = consensus::header_version(height);
 
@@ -645,6 +699,7 @@ impl Block {
 					total_difficulty: difficulty + prev.pow.total_difficulty,
 					..Default::default()
 				},
+				total_issue_overage,
 				..Default::default()
 			},
 			body: agg_tx.into(),
@@ -663,6 +718,10 @@ impl Block {
 	/// Get inputs
 	pub fn inputs(&self) -> &Vec<Input> {
 		&self.body.inputs
+	}
+
+	pub fn assets(&self) -> &Vec<AssetAction> {
+		&self.body.assets
 	}
 
 	/// Get inputs mutable
@@ -695,6 +754,10 @@ impl Block {
 		self.body.fee()
 	}
 
+	pub fn mint_overage(&self) -> Result<Option<Commitment>, Error> {
+		self.body.mint_overage().map_err(|e| Error::Transaction(e))
+	}
+
 	/// Matches any output with a potential spending input, eliminating them
 	/// from the block. Provides a simple way to cut-through the block. The
 	/// elimination is stable with respect to the order of inputs and outputs.
@@ -702,12 +765,13 @@ impl Block {
 	pub fn cut_through(self) -> Result<Block, Error> {
 		let mut inputs = self.inputs().clone();
 		let mut outputs = self.outputs().clone();
+		let assets = self.assets().clone();
 		transaction::cut_through(&mut inputs, &mut outputs)?;
 
 		let kernels = self.kernels().clone();
 
 		// Initialize tx body and sort everything.
-		let body = TransactionBody::init(inputs, outputs, kernels, false)?;
+		let body = TransactionBody::init(inputs, outputs, kernels, assets, false)?;
 
 		Ok(Block {
 			header: self.header,
@@ -757,10 +821,16 @@ impl Block {
 		self.verify_kernel_lock_heights()?;
 		self.verify_coinbase()?;
 
+		// mint asset amount
+		// let sum = self.assets().iter().fold(0u128, |sum, a| sum + a.amount());
+		let mint_overage = self.mint_overage()?;
+
 		// take the kernel offset for this block (block offset minus previous) and
 		// verify.body.outputs and kernel sums
+		// TODO add mint amount to it
 		let (_utxo_sum, kernel_sum) = self.verify_kernel_sums(
 			self.header.overage(),
+			mint_overage,
 			self.block_kernel_offset(prev_kernel_offset.clone())?,
 		)?;
 
@@ -788,6 +858,7 @@ impl Block {
 		{
 			let secp = static_secp_instance();
 			let secp = secp.lock();
+
 			let over_commit = secp.commit_value(reward(self.header.height, self.total_fees()))?;
 
 			let out_adjust_sum =
