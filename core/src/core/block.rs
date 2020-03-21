@@ -243,6 +243,7 @@ pub struct BlockHeader {
 	/// Total size of the issued assets MMR after applying this block
 	pub issue_mmr_size: u64,
 
+	/// Total asset issue/create, as the sum of outputs
 	pub total_issue_overage: Commitment,
 
 	/// Proof of work and related
@@ -351,6 +352,7 @@ impl Readable for BlockHeader {
 }
 
 impl BlockHeader {
+	/// Add a commitment to header's issue overage
 	pub fn add_issue_overage(&self, issue_overage: Commitment) -> Result<Commitment, Error> {
 		let new_overage = if self.total_issue_overage == *ZERO_OVERAGE_COMMITMENT {
 			issue_overage
@@ -719,6 +721,7 @@ impl Block {
 		&self.body.inputs
 	}
 
+	/// Get asset actions
 	pub fn assets(&self) -> &Vec<AssetAction> {
 		&self.body.assets
 	}
@@ -753,6 +756,7 @@ impl Block {
 		self.body.fee()
 	}
 
+	/// Get asset issue/create overage
 	pub fn mint_overage(&self) -> Result<Option<Commitment>, Error> {
 		self.body.mint_overage().map_err(|e| Error::Transaction(e))
 	}

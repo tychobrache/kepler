@@ -930,6 +930,7 @@ impl TransactionBody {
 		Ok(())
 	}
 
+	/// Validates signatures in asset actions
 	pub fn validate_asset_actions(&self) -> Result<(), Error> {
 		let ok = self.assets.iter().all(|action| action.validate());
 
@@ -1143,6 +1144,7 @@ impl Transaction {
 		}
 	}
 
+	/// Builds a new transaction with asset action
 	pub fn with_asset(self, asset: AssetAction) -> Transaction {
 		Transaction {
 			body: self.body.with_asset(asset),
@@ -1175,6 +1177,7 @@ impl Transaction {
 		&self.body.kernels
 	}
 
+	/// Get asset actions
 	pub fn assets(&self) -> &Vec<AssetAction> {
 		&self.body.assets
 	}
@@ -1430,6 +1433,7 @@ pub struct Input {
 	)]
 	pub commit: Commitment,
 
+	/// Asset type of input
 	pub asset: Asset,
 }
 
@@ -1554,6 +1558,7 @@ pub struct Output {
 	)]
 	pub proof: RangeProof,
 
+	/// Asset type of output
 	pub asset: Asset,
 }
 
@@ -1692,6 +1697,8 @@ pub struct OutputIdentifier {
 	pub features: OutputFeatures,
 	/// Output commitment
 	pub commit: Commitment,
+
+	/// Asset
 	pub asset: Asset,
 }
 
@@ -1844,12 +1851,12 @@ mod test {
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 		let commit = keychain
-			.commit(1003, &key_id, &SwitchCommitmentType::Regular, asset.into())
+			.commit(1003, &key_id, SwitchCommitmentType::Regular, asset.into())
 			.unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 		let commit_2 = keychain
-			.commit(1003, &key_id, &SwitchCommitmentType::Regular, asset.into())
+			.commit(1003, &key_id, SwitchCommitmentType::Regular, asset.into())
 			.unwrap();
 
 		assert!(commit == commit_2);
@@ -1861,7 +1868,7 @@ mod test {
 		let keychain = ExtKeychain::from_seed(&[0; 32], false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 		let commit = keychain
-			.commit(5, &key_id, &SwitchCommitmentType::Regular, asset.into())
+			.commit(5, &key_id, SwitchCommitmentType::Regular, asset.into())
 			.unwrap();
 
 		let input = Input {
