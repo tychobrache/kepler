@@ -416,8 +416,11 @@ fn verify_block_sums(b: &Block, batch: &store::Batch<'_>) -> Result<BlockSums, E
 	let offset = b.header.total_kernel_offset();
 
 	// Verify the kernel sums for the block_sums with the new block applied.
-	let (utxo_sum, kernel_sum) =
-		(block_sums, b as &dyn Committed).verify_kernel_sums(overage, offset)?;
+	let (utxo_sum, kernel_sum) = (block_sums, b as &dyn Committed).verify_kernel_sums(
+		overage,
+		b.header.issue_overage(),
+		offset,
+	)?;
 
 	Ok(BlockSums {
 		utxo_sum,

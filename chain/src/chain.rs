@@ -1527,6 +1527,7 @@ fn setup_head(
 			if !genesis.kernels().is_empty() {
 				let (utxo_sum, kernel_sum) = (sums, genesis as &dyn Committed).verify_kernel_sums(
 					genesis.header.overage(),
+					genesis.header.issue_overage(),
 					genesis.header.total_kernel_offset(),
 				)?;
 				sums = BlockSums {

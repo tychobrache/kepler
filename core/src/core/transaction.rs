@@ -1801,7 +1801,7 @@ mod test {
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 		let commit = keychain
-			.commit(5, &key_id, &SwitchCommitmentType::Regular, asset.into())
+			.commit(5, &key_id, SwitchCommitmentType::Regular, asset.into())
 			.unwrap();
 
 		// just some bytes for testing ser/deser

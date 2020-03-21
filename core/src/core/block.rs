@@ -365,6 +365,14 @@ impl BlockHeader {
 		return Ok(new_overage);
 	}
 
+	pub fn issue_overage(&self) -> Option<Commitment> {
+		if self.total_issue_overage == *ZERO_OVERAGE_COMMITMENT {
+			None
+		} else {
+			Some(self.total_issue_overage)
+		}
+	}
+
 	/// Write the pre-hash portion of the header
 	pub fn write_pre_pow<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.version.write(writer)?;
