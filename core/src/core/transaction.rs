@@ -689,6 +689,7 @@ impl TransactionBody {
 		self
 	}
 
+	/// Builds a new TransactionBody with an asset action
 	pub fn with_asset(mut self, asset: AssetAction) -> TransactionBody {
 		if !self.assets.contains(&asset) {
 			self.assets.push(asset);
@@ -721,6 +722,7 @@ impl TransactionBody {
 		self.fee() as i64
 	}
 
+	/// Overage of asset create or issuance
 	pub fn mint_overage(&self) -> Result<Option<Commitment>, Error> {
 		// created non-blinded commitments for all minting assets
 		//
@@ -1487,6 +1489,7 @@ impl Input {
 		self.commit
 	}
 
+	/// Asset type of input
 	pub fn asset(&self) -> Asset {
 		self.asset
 	}
