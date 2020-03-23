@@ -168,66 +168,66 @@ fn empty_block_with_coinbase_is_valid() {
 // 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 // 	let builder = ProofBuilder::new(&keychain);
 // 	let vc = verifier_cache();
-//
+
 // 	let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 // 	let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
 // 	let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
-//
+
 // 	let btc_asset: Asset = "BTC".into();
-//
+
 // 	// produce action with the wrong signature
 // 	let invalid_action = {
 // 		let secp = static_secp_instance();
 // 		let secp = secp.lock(); // drop the static lock after using. The same static secp instance is used later in the scope by another function.
-//
+
 // 		let sk = SecretKey::new(&secp, &mut thread_rng());
 // 		let pubkey = PublicKey::from_secret_key(&secp, &sk).unwrap();
-//
+
 // 		// Incorrect secret key to sign this action
 // 		let sk2 = SecretKey::new(&secp, &mut thread_rng());
-//
+
 // 		let issue_asset = IssuedAsset::new(100, pubkey, false, btc_asset);
-//
+
 // 		let message = Message::from_bytes(&issue_asset.to_bytes()).unwrap();
 // 		let sig = secp.sign(&message, &sk2).unwrap();
-//
+
 // 		AssetAction::New(btc_asset, issue_asset, sig)
 // 	};
-//
+
 // 	assert!(!invalid_action.validate());
-//
+
 // 	let new_assest_action = {
 // 		let secp = static_secp_instance();
 // 		let secp = secp.lock(); // drop the static lock after using. The same static secp instance is used later in the scope by another function.
-//
+
 // 		let sk = SecretKey::new(&secp, &mut thread_rng());
 // 		//			let sk = SecretKey::from_slice(&secp, &[1; 32]).unwrap();
 // 		let pubkey = PublicKey::from_secret_key(&secp, &sk).unwrap();
-//
+
 // 		let issue_asset = IssuedAsset::new(100, pubkey, false, btc_asset);
-//
+
 // 		let message = Message::from_bytes(&issue_asset.to_bytes()).unwrap();
 // 		let sig = secp.sign(&message, &sk).unwrap();
-//
+
 // 		AssetAction::New(btc_asset, issue_asset, sig)
 // 	};
-//
+
 // 	let new_assest_action2 = {
 // 		let secp = static_secp_instance();
 // 		let secp = secp.lock(); // drop the static lock after using. The same static secp instance is used later in the scope by another function.
-//
+
 // 		let sk = SecretKey::new(&secp, &mut thread_rng());
 // 		//			let sk = SecretKey::from_slice(&secp, &[1; 32]).unwrap();
 // 		let pubkey = PublicKey::from_secret_key(&secp, &sk).unwrap();
-//
+
 // 		let issue_asset = IssuedAsset::new(100, pubkey, false, btc_asset);
-//
+
 // 		let message = Message::from_bytes(&issue_asset.to_bytes()).unwrap();
 // 		let sig = secp.sign(&message, &sk).unwrap();
-//
+
 // 		AssetAction::New(btc_asset, issue_asset, sig)
 // 	};
-//
+
 // 	let badtx = build::transaction(
 // 		vec![
 // 			input(Asset::default(), 2, key_id1.clone()),
@@ -240,13 +240,13 @@ fn empty_block_with_coinbase_is_valid() {
 // 		&builder,
 // 	)
 // 	.unwrap();
-//
+
 // 	match badtx.validate_read() {
 // 		Err(transaction::Error::DuplicateAssetPoints) => {}
 // 		Err(err) => panic!("unexpected tx error: {}", err),
 // 		Ok(()) => panic!("expect tx to be invalid because of duplicate error"),
 // 	}
-//
+
 // 	let badtx_badsig = build::transaction(
 // 		vec![
 // 			input(Asset::default(), 2, key_id1.clone()),
@@ -258,7 +258,7 @@ fn empty_block_with_coinbase_is_valid() {
 // 		&builder,
 // 	)
 // 	.unwrap();
-//
+
 // 	match badtx_badsig.validate(Weighting::AsTransaction, vc) {
 // 		Err(transaction::Error::IncorrectSignature) => {}
 // 		Err(err) => panic!("unexpected tx error: {}", err),
@@ -267,9 +267,9 @@ fn empty_block_with_coinbase_is_valid() {
 // }
 
 #[test]
-fn block_with_mint_action() {
+fn block_with_mint_action() -> Result<(), Error> {
 	// FIXME -> test return Result
-	let keychain = ExtKeychain::from_random_seed(false).unwrap();
+	let keychain = ExtKeychain::from_random_seed(false)?;
 	let builder = ProofBuilder::new(&keychain);
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -333,7 +333,7 @@ fn block_with_mint_action() {
 		.collect::<Vec<_>>();
 	assert_eq!(coinbase_kernels.len(), 1);
 
-	tx.validate(Weighting::AsTransaction, vc.clone()).unwrap();
+	tx.validate(Weighting::AsTransaction, vc.clone())?;
 
 	// the block should be valid here (single coinbase output with corresponding
 	// txn kernel)
@@ -345,6 +345,8 @@ fn block_with_mint_action() {
 	assert!(b
 		.validate(&BlindingFactor::zero(), verifier_cache())
 		.is_ok());
+
+	Ok(())
 }
 
 #[test]
