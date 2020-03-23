@@ -14,6 +14,7 @@
 
 pub mod common;
 
+use self::core::core::asset::Asset;
 use self::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use self::core::core::{Output, OutputFeatures};
 use self::core::libtx::proof;
@@ -29,18 +30,21 @@ fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
 #[test]
 fn test_verifier_cache_rangeproofs() {
 	let cache = verifier_cache();
+	let asset = Asset::default();
 
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let switch = SwitchCommitmentType::Regular;
-	let commit = keychain.commit(5, &key_id, switch).unwrap();
+	let commit = keychain.commit(5, &key_id, switch, asset.into()).unwrap();
 	let builder = proof::ProofBuilder::new(&keychain);
-	let proof = proof::create(&keychain, &builder, 5, &key_id, switch, commit, None).unwrap();
+	let proof =
+		proof::create(&keychain, &builder, 5, &key_id, switch, commit, None, asset).unwrap();
 
 	let out = Output {
 		features: OutputFeatures::Plain,
 		commit: commit,
 		proof: proof,
+		asset: asset,
 	};
 
 	// Check our output is not verified according to the cache.

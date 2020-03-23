@@ -365,6 +365,7 @@ impl BlockHeader {
 		return Ok(new_overage);
 	}
 
+	/// Overage of assets issued/created in this block
 	pub fn issue_overage(&self) -> Option<Commitment> {
 		if self.total_issue_overage == *ZERO_OVERAGE_COMMITMENT {
 			None
