@@ -19,7 +19,7 @@ use crate::core::core::asset::Asset;
 use crate::core::core::block::Error;
 use crate::core::core::hash::Hashed;
 use crate::core::core::id::ShortIdentifiable;
-use crate::core::core::issued_asset::AssetAction;
+use crate::core::core::issued_asset::{AssetAction, IssuedAsset};
 use crate::core::core::transaction::{self, Transaction, Weighting};
 use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use crate::core::core::Committed;
@@ -33,8 +33,12 @@ use chrono::Duration;
 use kepler_core as core;
 use kepler_core::global::ChainTypes;
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
+use rand::thread_rng;
 use std::sync::Arc;
 use util::secp;
+use util::secp::key::{PublicKey, SecretKey};
+use util::secp::Message;
+use util::static_secp_instance;
 use util::RwLock;
 
 fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
@@ -156,115 +160,111 @@ fn empty_block_with_coinbase_is_valid() {
 		.is_ok());
 }
 
-// use std::sync::Arc;
-// use crate::util::RwLock;
-// use crate::core::verifier_cache::{LruVerifierCache, VerifierCache};
+#[test]
+fn tx_with_duplicate_new_asset() -> Result<(), Error> {
+	let keychain = ExtKeychain::from_random_seed(false)?;
+	let builder = ProofBuilder::new(&keychain);
+	let vc = verifier_cache();
 
-// fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
-// 	Arc::new(RwLock::new(LruVerifierCache::new()))
-// }
-// #[test]
-// fn tx_with_duplicate_new_asset() {
-// 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
-// 	let builder = ProofBuilder::new(&keychain);
-// 	let vc = verifier_cache();
+	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 
-// 	let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
-// 	let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
-// 	let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
+	let btc_asset: Asset = "BTC".into();
 
-// 	let btc_asset: Asset = "BTC".into();
+	// use rand::thread_rng;
 
-// 	// produce action with the wrong signature
-// 	let invalid_action = {
-// 		let secp = static_secp_instance();
-// 		let secp = secp.lock(); // drop the static lock after using. The same static secp instance is used later in the scope by another function.
+	// produce action with the wrong signature
+	let invalid_action = {
+		let secp = static_secp_instance();
+		let secp = secp.lock(); // drop the static lock after using. The same static secp instance is used later in the scope by another function.
 
-// 		let sk = SecretKey::new(&secp, &mut thread_rng());
-// 		let pubkey = PublicKey::from_secret_key(&secp, &sk).unwrap();
+		let sk = SecretKey::new(&secp, &mut thread_rng());
+		let pubkey = PublicKey::from_secret_key(&secp, &sk)?;
 
-// 		// Incorrect secret key to sign this action
-// 		let sk2 = SecretKey::new(&secp, &mut thread_rng());
+		// Incorrect secret key to sign this action
+		let sk2 = SecretKey::new(&secp, &mut thread_rng());
 
-// 		let issue_asset = IssuedAsset::new(100, pubkey, false, btc_asset);
+		let issue_asset = IssuedAsset::new(100, pubkey, false, btc_asset);
 
-// 		let message = Message::from_bytes(&issue_asset.to_bytes()).unwrap();
-// 		let sig = secp.sign(&message, &sk2).unwrap();
+		let message = Message::from_bytes(&issue_asset.to_bytes())?;
+		let sig = secp.sign(&message, &sk2)?;
 
-// 		AssetAction::New(btc_asset, issue_asset, sig)
-// 	};
+		AssetAction::New(btc_asset, issue_asset, sig)
+	};
 
-// 	assert!(!invalid_action.validate());
+	assert!(!invalid_action.validate());
 
-// 	let new_assest_action = {
-// 		let secp = static_secp_instance();
-// 		let secp = secp.lock(); // drop the static lock after using. The same static secp instance is used later in the scope by another function.
+	let new_assest_action = {
+		let secp = static_secp_instance();
+		let secp = secp.lock(); // drop the static lock after using. The same static secp instance is used later in the scope by another function.
 
-// 		let sk = SecretKey::new(&secp, &mut thread_rng());
-// 		//			let sk = SecretKey::from_slice(&secp, &[1; 32]).unwrap();
-// 		let pubkey = PublicKey::from_secret_key(&secp, &sk).unwrap();
+		let sk = SecretKey::new(&secp, &mut thread_rng());
+		//			let sk = SecretKey::from_slice(&secp, &[1; 32]).unwrap();
+		let pubkey = PublicKey::from_secret_key(&secp, &sk)?;
 
-// 		let issue_asset = IssuedAsset::new(100, pubkey, false, btc_asset);
+		let issue_asset = IssuedAsset::new(100, pubkey, false, btc_asset);
 
-// 		let message = Message::from_bytes(&issue_asset.to_bytes()).unwrap();
-// 		let sig = secp.sign(&message, &sk).unwrap();
+		let message = Message::from_bytes(&issue_asset.to_bytes())?;
+		let sig = secp.sign(&message, &sk)?;
 
-// 		AssetAction::New(btc_asset, issue_asset, sig)
-// 	};
+		AssetAction::New(btc_asset, issue_asset, sig)
+	};
 
-// 	let new_assest_action2 = {
-// 		let secp = static_secp_instance();
-// 		let secp = secp.lock(); // drop the static lock after using. The same static secp instance is used later in the scope by another function.
+	let new_assest_action2 = {
+		let secp = static_secp_instance();
+		let secp = secp.lock(); // drop the static lock after using. The same static secp instance is used later in the scope by another function.
 
-// 		let sk = SecretKey::new(&secp, &mut thread_rng());
-// 		//			let sk = SecretKey::from_slice(&secp, &[1; 32]).unwrap();
-// 		let pubkey = PublicKey::from_secret_key(&secp, &sk).unwrap();
+		let sk = SecretKey::new(&secp, &mut thread_rng());
+		//			let sk = SecretKey::from_slice(&secp, &[1; 32]).unwrap();
+		let pubkey = PublicKey::from_secret_key(&secp, &sk)?;
 
-// 		let issue_asset = IssuedAsset::new(100, pubkey, false, btc_asset);
+		let issue_asset = IssuedAsset::new(100, pubkey, false, btc_asset);
 
-// 		let message = Message::from_bytes(&issue_asset.to_bytes()).unwrap();
-// 		let sig = secp.sign(&message, &sk).unwrap();
+		let message = Message::from_bytes(&issue_asset.to_bytes())?;
+		let sig = secp.sign(&message, &sk)?;
 
-// 		AssetAction::New(btc_asset, issue_asset, sig)
-// 	};
+		AssetAction::New(btc_asset, issue_asset, sig)
+	};
 
-// 	let badtx = build::transaction(
-// 		vec![
-// 			input(Asset::default(), 2, key_id1.clone()),
-// 			mint(new_assest_action),
-// 			mint(new_assest_action2),
-// 			output(btc_asset, 100, key_id2.clone()),
-// 			with_fee(2),
-// 		],
-// 		&keychain,
-// 		&builder,
-// 	)
-// 	.unwrap();
+	let badtx = build::transaction(
+		KernelFeatures::Plain { fee: 2 },
+		vec![
+			input(2, key_id1.clone()),
+			mint(new_assest_action),
+			mint(new_assest_action2),
+			output_with_asset(btc_asset, 100, key_id2.clone()),
+		],
+		&keychain,
+		&builder,
+	)
+	.unwrap();
 
-// 	match badtx.validate_read() {
-// 		Err(transaction::Error::DuplicateAssetPoints) => {}
-// 		Err(err) => panic!("unexpected tx error: {}", err),
-// 		Ok(()) => panic!("expect tx to be invalid because of duplicate error"),
-// 	}
+	match badtx.validate_read() {
+		Err(transaction::Error::DuplicateAssetPoints) => {}
+		Err(err) => panic!("unexpected tx error: {}", err),
+		Ok(()) => panic!("expect tx to be invalid because of duplicate error"),
+	}
 
-// 	let badtx_badsig = build::transaction(
-// 		vec![
-// 			input(Asset::default(), 2, key_id1.clone()),
-// 			mint(invalid_action),
-// 			output(btc_asset, 100, key_id2.clone()),
-// 			with_fee(2),
-// 		],
-// 		&keychain,
-// 		&builder,
-// 	)
-// 	.unwrap();
+	let badtx_badsig = build::transaction(
+		KernelFeatures::Plain { fee: 2 },
+		vec![
+			input(2, key_id1.clone()),
+			mint(invalid_action),
+			output_with_asset(btc_asset, 100, key_id2.clone()),
+		],
+		&keychain,
+		&builder,
+	)
+	.unwrap();
 
-// 	match badtx_badsig.validate(Weighting::AsTransaction, vc) {
-// 		Err(transaction::Error::IncorrectSignature) => {}
-// 		Err(err) => panic!("unexpected tx error: {}", err),
-// 		Ok(()) => panic!("expect tx to be invalid because of signature error"),
-// 	}
-// }
+	match badtx_badsig.validate(Weighting::AsTransaction, vc) {
+		Err(transaction::Error::IncorrectSignature) => {}
+		Err(err) => panic!("unexpected tx error: {}", err),
+		Ok(()) => panic!("expect tx to be invalid because of signature error"),
+	}
+
+	Ok(())
+}
 
 #[test]
 fn block_with_mint_action() -> Result<(), Error> {
