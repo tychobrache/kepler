@@ -32,6 +32,7 @@
 //! )
 
 use crate::core::asset::Asset;
+use crate::core::issued_asset::AssetAction;
 use crate::core::{Input, KernelFeatures, Output, OutputFeatures, Transaction, TxKernel};
 use crate::libtx::proof::{self, ProofBuild};
 use crate::libtx::{aggsig, Error};
@@ -136,14 +137,30 @@ where
 	K: Keychain,
 	B: ProofBuild,
 {
+	build_output(Asset::default(), value, key_id)
+}
+
+/// Adds an asset output with the provided value and key identifier from the
+/// keychain.
+pub fn output_with_asset<K, B>(asset: Asset, value: u64, key_id: Identifier) -> Box<Append<K, B>>
+where
+	K: Keychain,
+	B: ProofBuild,
+{
+	build_output(asset, value, key_id)
+}
+
+fn build_output<K, B>(asset: Asset, value: u64, key_id: Identifier) -> Box<Append<K, B>>
+where
+	K: Keychain,
+	B: ProofBuild,
+{
 	Box::new(
 		move |build, acc| -> Result<(Transaction, BlindSum), Error> {
 			let (tx, sum) = acc?;
 
 			// TODO: proper support for different switch commitment schemes
 			let switch = SwitchCommitmentType::Regular;
-
-			let asset = Asset::default();
 
 			let commit = build
 				.keychain
@@ -171,6 +188,19 @@ where
 				}),
 				sum.add_key_id(key_id.to_value_path(value)),
 			))
+		},
+	)
+}
+
+/// Mint an asset, and add output for that supply
+pub fn mint<K, B>(action: AssetAction) -> Box<Append<K, B>>
+where
+	K: Keychain,
+	B: ProofBuild,
+{
+	Box::new(
+		move |build, acc| -> Result<(Transaction, BlindSum), Error> {
+			acc.map(|(tx, sum)| (tx.with_asset(action), sum))
 		},
 	)
 }

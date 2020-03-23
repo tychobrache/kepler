@@ -26,7 +26,7 @@ use crate::core::core::Committed;
 use crate::core::core::{
 	Block, BlockHeader, CompactBlock, HeaderVersion, KernelFeatures, OutputFeatures,
 };
-use crate::core::libtx::build::{self, input, output};
+use crate::core::libtx::build::{self, input, input_with_asset, mint, output, output_with_asset};
 use crate::core::libtx::ProofBuilder;
 use crate::core::{global, ser};
 use chrono::Duration;
@@ -44,7 +44,6 @@ fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
 #[test]
 fn too_large_block() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
-	let asset = Asset::default();
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let max_out = global::max_block_weight() / BLOCK_OUTPUT_WEIGHT;
@@ -86,7 +85,6 @@ fn very_empty_block() {
 #[test]
 // builds a block with a tx spending another and check that cut_through occurred
 fn block_with_cut_through() {
-	let asset = Asset::default();
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -170,66 +168,66 @@ fn empty_block_with_coinbase_is_valid() {
 // 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 // 	let builder = ProofBuilder::new(&keychain);
 // 	let vc = verifier_cache();
-
+//
 // 	let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 // 	let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
 // 	let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
-
+//
 // 	let btc_asset: Asset = "BTC".into();
-
+//
 // 	// produce action with the wrong signature
 // 	let invalid_action = {
 // 		let secp = static_secp_instance();
 // 		let secp = secp.lock(); // drop the static lock after using. The same static secp instance is used later in the scope by another function.
-
+//
 // 		let sk = SecretKey::new(&secp, &mut thread_rng());
 // 		let pubkey = PublicKey::from_secret_key(&secp, &sk).unwrap();
-
+//
 // 		// Incorrect secret key to sign this action
 // 		let sk2 = SecretKey::new(&secp, &mut thread_rng());
-
+//
 // 		let issue_asset = IssuedAsset::new(100, pubkey, false, btc_asset);
-
+//
 // 		let message = Message::from_bytes(&issue_asset.to_bytes()).unwrap();
 // 		let sig = secp.sign(&message, &sk2).unwrap();
-
+//
 // 		AssetAction::New(btc_asset, issue_asset, sig)
 // 	};
-
+//
 // 	assert!(!invalid_action.validate());
-
+//
 // 	let new_assest_action = {
 // 		let secp = static_secp_instance();
 // 		let secp = secp.lock(); // drop the static lock after using. The same static secp instance is used later in the scope by another function.
-
+//
 // 		let sk = SecretKey::new(&secp, &mut thread_rng());
 // 		//			let sk = SecretKey::from_slice(&secp, &[1; 32]).unwrap();
 // 		let pubkey = PublicKey::from_secret_key(&secp, &sk).unwrap();
-
+//
 // 		let issue_asset = IssuedAsset::new(100, pubkey, false, btc_asset);
-
+//
 // 		let message = Message::from_bytes(&issue_asset.to_bytes()).unwrap();
 // 		let sig = secp.sign(&message, &sk).unwrap();
-
+//
 // 		AssetAction::New(btc_asset, issue_asset, sig)
 // 	};
-
+//
 // 	let new_assest_action2 = {
 // 		let secp = static_secp_instance();
 // 		let secp = secp.lock(); // drop the static lock after using. The same static secp instance is used later in the scope by another function.
-
+//
 // 		let sk = SecretKey::new(&secp, &mut thread_rng());
 // 		//			let sk = SecretKey::from_slice(&secp, &[1; 32]).unwrap();
 // 		let pubkey = PublicKey::from_secret_key(&secp, &sk).unwrap();
-
+//
 // 		let issue_asset = IssuedAsset::new(100, pubkey, false, btc_asset);
-
+//
 // 		let message = Message::from_bytes(&issue_asset.to_bytes()).unwrap();
 // 		let sig = secp.sign(&message, &sk).unwrap();
-
+//
 // 		AssetAction::New(btc_asset, issue_asset, sig)
 // 	};
-
+//
 // 	let badtx = build::transaction(
 // 		vec![
 // 			input(Asset::default(), 2, key_id1.clone()),
@@ -242,13 +240,13 @@ fn empty_block_with_coinbase_is_valid() {
 // 		&builder,
 // 	)
 // 	.unwrap();
-
+//
 // 	match badtx.validate_read() {
 // 		Err(transaction::Error::DuplicateAssetPoints) => {}
 // 		Err(err) => panic!("unexpected tx error: {}", err),
 // 		Ok(()) => panic!("expect tx to be invalid because of duplicate error"),
 // 	}
-
+//
 // 	let badtx_badsig = build::transaction(
 // 		vec![
 // 			input(Asset::default(), 2, key_id1.clone()),
@@ -260,7 +258,7 @@ fn empty_block_with_coinbase_is_valid() {
 // 		&builder,
 // 	)
 // 	.unwrap();
-
+//
 // 	match badtx_badsig.validate(Weighting::AsTransaction, vc) {
 // 		Err(transaction::Error::IncorrectSignature) => {}
 // 		Err(err) => panic!("unexpected tx error: {}", err),
@@ -268,83 +266,86 @@ fn empty_block_with_coinbase_is_valid() {
 // 	}
 // }
 
-// #[test]
-// fn block_with_mint_action() {
-// 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
-// 	let builder = ProofBuilder::new(&keychain);
-// 	let prev = BlockHeader::default();
-// 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-// 	let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
-// 	let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
-// 	let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
-// 	let key_id4 = ExtKeychainPath::new(1, 4, 0, 0, 0).to_identifier();
-// 	let key_id5 = ExtKeychainPath::new(1, 5, 0, 0, 0).to_identifier();
+#[test]
+fn block_with_mint_action() {
+	// FIXME -> test return Result
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
+	let builder = ProofBuilder::new(&keychain);
+	let prev = BlockHeader::default();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
+	let key_id3 = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
+	let key_id4 = ExtKeychain::derive_key_id(1, 4, 0, 0, 0);
+	let key_id5 = ExtKeychain::derive_key_id(1, 5, 0, 0, 0);
 
-// 	let vc = verifier_cache();
+	let vc = verifier_cache();
 
-// 	let btc_asset: Asset = "BTC".into();
-// 	// TODO mint fees
-// 	// TODO multiple mint outputs
+	let btc_asset: Asset = "BTC".into();
+	// TODO mint fees
+	// TODO multiple mint outputs
 
-// 	let tx = build::transaction(
-// 		vec![
-// 			input(Asset::default(), 10, key_id1),
-// 			input(Asset::default(), 12, key_id2),
-// 			output(Asset::default(), 20, key_id3),
-// 			mint(AssetAction::Issue(btc_asset, 100, Default::default())),
-// 			output(btc_asset, 50, key_id4),
-// 			output(btc_asset, 50, key_id5),
-// 			with_fee(2),
-// 		],
-// 		&keychain,
-// 		&builder,
-// 	)
-// 	.unwrap();
+	let mut tx = build::transaction(
+		KernelFeatures::Plain { fee: 2 },
+		vec![
+			input_with_asset(Asset::default(), 10, key_id1),
+			input_with_asset(Asset::default(), 12, key_id2),
+			output_with_asset(Asset::default(), 20, key_id3),
+			mint(AssetAction::Issue(btc_asset, 100, Default::default())),
+			output_with_asset(btc_asset, 50, key_id4),
+			output_with_asset(btc_asset, 50, key_id5),
+		],
+		&keychain,
+		&builder,
+	)
+	.unwrap();
 
-// 	let height = prev.height + 1;
+	let b = new_block(vec![&mut tx], &keychain, &builder, &prev, &key_id);
 
-// 	let fees = tx.fee();
+	// let height = prev.height + 1;
+	//
+	// let fees = tx.fee();
+	//
+	// let reward_output =
+	// 	libtx::reward::output(&keychain, &builder, &key_id, fees, height, false).unwrap();
+	// let b =
+	// 	core::core::Block::new(&prev, vec![tx.clone()], Difficulty::min(), reward_output).unwrap();
 
-// 	let reward_output =
-// 		libtx::reward::output(&keychain, &builder, &key_id, fees, height, false).unwrap();
-// 	let b =
-// 		core::core::Block::new(&prev, vec![tx.clone()], Difficulty::min(), reward_output).unwrap();
+	// let b = new_block(vec![&tx], &keychain, &builder, &prev, &key_id);
 
-// 	// let b = new_block(vec![&tx], &keychain, &builder, &prev, &key_id);
+	// assert_eq!(b.inputs().len(), 2);
+	// assert_eq!(b.outputs().len(), 2);
+	// assert_eq!(b.kernels().len(), 2);
 
-// 	// assert_eq!(b.inputs().len(), 2);
-// 	// assert_eq!(b.outputs().len(), 2);
-// 	// assert_eq!(b.kernels().len(), 2);
+	let coinbase_outputs = b
+		.outputs()
+		.iter()
+		.filter(|out| out.is_coinbase())
+		.map(|o| o.clone())
+		.collect::<Vec<_>>();
+	assert_eq!(coinbase_outputs.len(), 1);
 
-// 	let coinbase_outputs = b
-// 		.outputs()
-// 		.iter()
-// 		.filter(|out| out.is_coinbase())
-// 		.map(|o| o.clone())
-// 		.collect::<Vec<_>>();
-// 	assert_eq!(coinbase_outputs.len(), 1);
+	let coinbase_kernels = b
+		.kernels()
+		.iter()
+		.filter(|out| out.is_coinbase())
+		.map(|o| o.clone())
+		.collect::<Vec<_>>();
+	assert_eq!(coinbase_kernels.len(), 1);
 
-// 	let coinbase_kernels = b
-// 		.kernels()
-// 		.iter()
-// 		.filter(|out| out.is_coinbase())
-// 		.map(|o| o.clone())
-// 		.collect::<Vec<_>>();
-// 	assert_eq!(coinbase_kernels.len(), 1);
+	tx.validate(Weighting::AsTransaction, vc.clone()).unwrap();
 
-// 	tx.validate(Weighting::AsTransaction, vc.clone()).unwrap();
+	// the block should be valid here (single coinbase output with corresponding
+	// txn kernel)
+	// match b.validate(&BlindingFactor::zero(), verifier_cache()) {
+	// 	Err(err) => println!("validate err: {}", err),
+	// 	Ok(_) => (),
+	// }
 
-// 	// the block should be valid here (single coinbase output with corresponding
-// 	// txn kernel)
-// 	// match b.validate(&BlindingFactor::zero(), verifier_cache()) {
-// 	// 	Err(err) => println!("validate err: {}", err),
-// 	// 	Ok(_) => (),
-// 	// }
-
-// 	assert!(b
-// 		.validate(&BlindingFactor::zero(), verifier_cache())
-// 		.is_ok());
-// }
+	assert!(b
+		.validate(&BlindingFactor::zero(), verifier_cache())
+		.is_ok());
+}
 
 #[test]
 // test that flipping the COINBASE flag on the output features
@@ -675,7 +676,6 @@ fn serialize_deserialize_compact_block() {
 // Duplicate a range proof from a valid output into another of the same amount
 #[test]
 fn same_amount_outputs_copy_range_proof() {
-	let asset = Asset::default();
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = keychain::ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -723,7 +723,6 @@ fn same_amount_outputs_copy_range_proof() {
 // Swap a range proof with the right private key but wrong amount
 #[test]
 fn wrong_amount_range_proof() {
-	let asset = Asset::default();
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = keychain::ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
