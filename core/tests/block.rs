@@ -20,7 +20,7 @@ use crate::core::core::block::Error;
 use crate::core::core::hash::Hashed;
 use crate::core::core::id::ShortIdentifiable;
 use crate::core::core::issued_asset::AssetAction;
-use crate::core::core::transaction::{self, Error as TxError, Transaction, Weighting};
+use crate::core::core::transaction::{self, Transaction, Weighting};
 use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use crate::core::core::Committed;
 use crate::core::core::{

@@ -16,7 +16,6 @@
 
 pub mod common;
 
-use self::core::core::asset::Asset;
 use self::core::core::block::BlockHeader;
 use self::core::core::block::Error::KernelLockHeight;
 use self::core::core::hash::{Hashed, ZERO_HASH};
@@ -96,7 +95,6 @@ fn tx_double_ser_deser() {
 #[test]
 #[should_panic(expected = "Keychain Error")]
 fn test_zero_commit_fails() {
-	let asset = Asset::default();
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -117,7 +115,6 @@ fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
 
 #[test]
 fn build_tx_kernel() {
-	let asset = Asset::default();
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -364,7 +361,6 @@ fn basic_transaction_deaggregation() {
 
 #[test]
 fn hash_output() {
-	let asset = Asset::default();
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -420,7 +416,6 @@ fn tx_hash_diff() {
 /// 2 inputs, 2 outputs transaction.
 #[test]
 fn tx_build_exchange() {
-	let asset = Asset::default();
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -532,7 +527,6 @@ fn simple_block() {
 
 #[test]
 fn test_block_with_timelocked_tx() {
-	let asset = Asset::default();
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);

@@ -13,7 +13,6 @@
 // limitations under the License.
 
 //! Common test functions
-use kepler_core::core::asset::Asset;
 use kepler_core::core::hash::DefaultHashable;
 use kepler_core::core::{Block, BlockHeader, KernelFeatures, Transaction};
 use kepler_core::libtx::{
@@ -28,7 +27,6 @@ use keychain::{Identifier, Keychain};
 // utility producing a transaction with 2 inputs and a single outputs
 #[allow(dead_code)]
 pub fn tx2i1o() -> Transaction {
-	let asset = Asset::default();
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = keychain::ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -47,7 +45,6 @@ pub fn tx2i1o() -> Transaction {
 // utility producing a transaction with a single input and output
 #[allow(dead_code)]
 pub fn tx1i1o() -> Transaction {
-	let asset = Asset::default();
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = keychain::ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -67,7 +64,6 @@ pub fn tx1i1o() -> Transaction {
 // Note: this tx has an "offset" kernel
 #[allow(dead_code)]
 pub fn tx1i2o() -> Transaction {
-	let asset = Asset::default();
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = keychain::ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -123,7 +119,6 @@ where
 	K: Keychain,
 	B: ProofBuild,
 {
-	let asset = Asset::default();
 	build::transaction(
 		KernelFeatures::Plain { fee: 2 },
 		vec![input(v, key_id1), output(3, key_id2)],

@@ -199,7 +199,7 @@ where
 	B: ProofBuild,
 {
 	Box::new(
-		move |build, acc| -> Result<(Transaction, BlindSum), Error> {
+		move |_build, acc| -> Result<(Transaction, BlindSum), Error> {
 			acc.map(|(tx, sum)| (tx.with_asset(action), sum))
 		},
 	)
