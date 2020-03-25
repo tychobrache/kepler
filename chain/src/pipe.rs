@@ -16,6 +16,7 @@
 
 use crate::core::consensus;
 use crate::core::core::hash::Hashed;
+use crate::core::core::issued_asset::AssetAction;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::Committed;
 use crate::core::core::{Block, BlockHeader, BlockSums};
@@ -129,6 +130,9 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 		// rewound txhashset extension to reflect chain state prior
 		// to applying the new block.
 		verify_coinbase_maturity(b, ext, batch)?;
+
+		// Validate the block against assets.
+		validate_asset(b, ext, batch)?;
 
 		// Validate the block against the UTXO set.
 		validate_utxo(b, ext, batch)?;
@@ -383,6 +387,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(
 
 fn validate_block(block: &Block, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
 	let prev = ctx.batch.get_previous_header(&block.header)?;
+
 	block
 		.validate(&prev.total_kernel_offset, ctx.verifier_cache.clone())
 		.map_err(ErrorKind::InvalidBlockProof)?;
@@ -564,6 +569,8 @@ pub fn rewind_and_apply_fork(
 
 		// Re-verify coinbase maturity along this fork.
 		verify_coinbase_maturity(&fb, ext, batch)?;
+		// Validate the block against assets.
+		validate_asset(&fb, ext, batch)?;
 		// Validate the block against the UTXO set.
 		validate_utxo(&fb, ext, batch)?;
 		// Re-verify block_sums to set the block_sums up on this fork correctly.
@@ -585,4 +592,38 @@ fn validate_utxo(
 	extension
 		.utxo_view(header_extension)
 		.validate_block(block, batch)
+}
+
+fn validate_asset(
+	block: &Block,
+	ext: &mut txhashset::ExtensionPair<'_>,
+	batch: &store::Batch<'_>,
+) -> Result<(), Error> {
+	for asset_action in block.assets().iter() {
+		let asset = asset_action.asset();
+
+		let ext = &ext.extension;
+
+		let issued_asset = match asset_action {
+			AssetAction::New(_, issued_asset, _) => {
+				if ext.asset_view(&asset, batch).is_some() {
+					return Err(ErrorKind::InvalidAsset.into());
+				}
+				issued_asset.clone()
+			}
+			_ => {
+				let asset_option = ext.asset_view(&asset, batch);
+				if asset_option.is_none() {
+					return Err(ErrorKind::InvalidAsset.into());
+				}
+				asset_option.unwrap()
+			}
+		};
+
+		if !asset_action.valid(issued_asset.owner()) {
+			return Err(ErrorKind::InvalidAsset.into());
+		}
+	}
+
+	Ok(())
 }

@@ -15,7 +15,9 @@
 //! Implements storage primitives required by the chain
 
 use crate::core::consensus::HeaderInfo;
+use crate::core::core::asset::Asset;
 use crate::core::core::hash::{Hash, Hashed};
+use crate::core::core::issued_asset::IssuedAsset;
 use crate::core::core::{Block, BlockHeader, BlockSums};
 use crate::core::pow::Difficulty;
 use crate::core::ser::ProtocolVersion;
@@ -37,6 +39,7 @@ const OUTPUT_POS_PREFIX: u8 = b'p';
 const BLOCK_INPUT_BITMAP_PREFIX: u8 = b'B';
 const BLOCK_SUMS_PREFIX: u8 = b'M';
 const BLOCK_SPENT_PREFIX: u8 = b'S';
+const ASSET_PREFIX: u8 = 'A' as u8;
 
 /// All chain-related database operations
 pub struct ChainStore {
@@ -124,6 +127,15 @@ impl ChainStore {
 			self.db
 				.get_ser(&to_key(OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec())),
 			|| format!("Output position for: {:?}", commit),
+		)
+	}
+
+	/// Get asset from index.
+	pub fn get_issued_asset(&self, bytes: &Asset) -> Result<IssuedAsset, Error> {
+		option_to_not_found(
+			self.db
+				.get_ser(&to_key(ASSET_PREFIX, &mut bytes.to_bytes().to_vec())),
+			|| format!("Issue asset: {:?}", bytes),
 		)
 	}
 
@@ -284,6 +296,28 @@ impl<'a> Batch<'a> {
 				.get_ser(&to_key(OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec())),
 			|| format!("Output position for commit: {:?}", commit),
 		)
+	}
+
+	/// Save asset to index.
+	pub fn save_issued_asset(&self, bytes: &Asset, asset: &IssuedAsset) -> Result<(), Error> {
+		self.db
+			.put_ser(&to_key(ASSET_PREFIX, &mut bytes.to_bytes().to_vec()), asset)
+	}
+
+	pub fn get_issued_asset(&self, bytes: &Asset) -> Result<IssuedAsset, Error> {
+		option_to_not_found(
+			self.db
+				.get_ser(&to_key(ASSET_PREFIX, &mut bytes.to_bytes().to_vec())),
+			|| format!("Issue asset: {:?}", bytes),
+		)
+	}
+
+	pub fn clear_issued_assets(&self) -> Result<(), Error> {
+		let key = to_key(ASSET_PREFIX, &mut "".to_string().into_bytes());
+		for (k, _) in self.db.iter::<u64>(&key)? {
+			self.db.delete(&k)?;
+		}
+		Ok(())
 	}
 
 	/// Get the previous header.

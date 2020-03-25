@@ -34,7 +34,22 @@ fn data_files() {
 		assert_eq!(chain.head().unwrap().height, 3);
 	};
 
+<<<<<<< ours
 	// Now reload the chain from existing data files and check it is valid.
+=======
+			match chain.validate(false) {
+				Err(err) => {
+					println!("chain validate err: {}", err);
+					panic!("chain validate error");
+				}
+				Ok(_) => (),
+			}
+
+			// .unwrap();
+		}
+	}
+	// Now reload the chain, should have valid indices
+>>>>>>> theirs
 	{
 		let chain = init_chain(chain_dir, genesis::genesis_dev());
 		chain.validate(false).unwrap();

@@ -38,6 +38,7 @@ fn clean_output_dir(dir_name: &str) {
 #[test]
 fn test_coinbase_maturity() {
 	let _ = env_logger::init();
+
 	let chain_dir = ".kepler_coinbase";
 	clean_output_dir(chain_dir);
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
@@ -105,9 +106,14 @@ fn test_coinbase_maturity() {
 		let coinbase_txn = build::transaction(
 			KernelFeatures::Plain { fee: 2 },
 			vec![
-				build::coinbase_input(amount, key_id1.clone()),
-				build::output(amount - 2, key_id2.clone()),
-			],
+							build::coinbase_input(amount, key_id1.clone()),
+			<<<<<<< ours
+							build::output(amount - 2, key_id2.clone()),
+			=======
+							build::output(Default::default(), amount - 2, key_id2.clone()),
+							build::with_fee(2),
+			>>>>>>> theirs
+						],
 			&keychain,
 			&builder,
 		)
@@ -192,9 +198,14 @@ fn test_coinbase_maturity() {
 			let coinbase_txn = build::transaction(
 				KernelFeatures::Plain { fee: 2 },
 				vec![
-					build::coinbase_input(amount, key_id1.clone()),
-					build::output(amount - 2, key_id2.clone()),
-				],
+									build::coinbase_input(amount, key_id1.clone()),
+				<<<<<<< ours
+									build::output(amount - 2, key_id2.clone()),
+				=======
+									build::output(Default::default(), amount - 2, key_id2.clone()),
+									build::with_fee(2),
+				>>>>>>> theirs
+								],
 				&keychain,
 				&builder,
 			)

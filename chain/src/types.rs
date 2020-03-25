@@ -190,6 +190,7 @@ pub struct TxHashSetRoots {
 	pub rproof_root: Hash,
 	/// Kernel root
 	pub kernel_root: Hash,
+	pub issue_root: Hash,
 }
 
 impl TxHashSetRoots {

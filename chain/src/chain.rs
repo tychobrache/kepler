@@ -15,6 +15,18 @@
 //! Facade and handler for the rest of the blockchain implementation
 //! and mostly the chain pipeline.
 
+use std::collections::HashMap;
+use std::fs::{self, File};
+use std::io::Read;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use kepler_store::Error::NotFoundErr;
+
+use crate::core::core::asset::Asset;
+use crate::core::core::block::ZERO_OVERAGE_COMMITMENT;
 use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::verifier_cache::VerifierCache;
@@ -34,14 +46,7 @@ use crate::types::{
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::RwLock;
-use kepler_store::Error::NotFoundErr;
-use std::collections::HashMap;
-use std::fs::{self, File};
-use std::io::Read;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use kepler_util::static_secp_instance;
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
 pub const MAX_ORPHAN_SIZE: usize = 200;
@@ -606,9 +611,10 @@ impl Chain {
 		// depends on the output_mmr_size
 		{
 			// Carefully destructure these correctly...
-			let (output_mmr_size, _, kernel_mmr_size) = sizes;
+			let (output_mmr_size, _, kernel_mmr_size, issue_mmr_size) = sizes;
 			b.header.output_mmr_size = output_mmr_size;
 			b.header.kernel_mmr_size = kernel_mmr_size;
+			b.header.issue_mmr_size = issue_mmr_size;
 		}
 
 		// Set the prev_root on the header.
@@ -618,6 +624,7 @@ impl Chain {
 		b.header.output_root = roots.output_root(&b.header);
 		b.header.range_proof_root = roots.rproof_root;
 		b.header.kernel_root = roots.kernel_root;
+		b.header.issue_root = roots.issue_root;
 
 		Ok(())
 	}
@@ -1172,6 +1179,7 @@ impl Chain {
 				commit: x.commit,
 				features: x.features,
 				proof: y,
+				asset: x.asset,
 			});
 		}
 		Ok((outputs.0, last_index, output_vec))

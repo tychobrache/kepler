@@ -15,8 +15,10 @@
 //! Utility structs to handle the 3 MMRs (output, rangeproof,
 //! kernel) along the overall header MMR conveniently and transactionally.
 
+use crate::core::core::asset::Asset;
 use crate::core::core::committed::Committed;
 use crate::core::core::hash::{Hash, Hashed};
+use crate::core::core::issued_asset::IssuedAsset;
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::pmmr::{self, Backend, ReadonlyPMMR, RewindablePMMR, PMMR};
 use crate::core::core::{Block, BlockHeader, Input, Output, OutputIdentifier, TxKernel};
@@ -31,6 +33,7 @@ use crate::util::{file, secp_static, zip};
 use croaring::Bitmap;
 use kepler_store;
 use kepler_store::pmmr::{clean_files_by_prefix, PMMRBackend};
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
@@ -42,7 +45,7 @@ const TXHASHSET_SUBDIR: &str = "txhashset";
 const OUTPUT_SUBDIR: &str = "output";
 const RANGE_PROOF_SUBDIR: &str = "rangeproof";
 const KERNEL_SUBDIR: &str = "kernel";
-
+const ISSUE_SUBDIR: &str = "issue";
 const TXHASHSET_ZIP: &str = "txhashset_snapshot";
 
 /// Convenience wrapper around a single prunable MMR backend.
@@ -115,6 +118,8 @@ impl PMMRHandle<BlockHeader> {
 pub struct TxHashSet {
 	output_pmmr_h: PMMRHandle<Output>,
 	rproof_pmmr_h: PMMRHandle<RangeProof>,
+
+	issue_pmmr_h: PMMRHandle<IssuedAsset>,
 	kernel_pmmr_h: PMMRHandle<TxKernel>,
 
 	bitmap_accumulator: BitmapAccumulator,
@@ -146,6 +151,15 @@ impl TxHashSet {
 			true,
 			ProtocolVersion(1),
 			header,
+		)?;
+
+		let issue_pmmr_h = PMMRHandle::new(
+			&root_dir,
+			TXHASHSET_SUBDIR,
+			ISSUE_SUBDIR,
+			false, // not pruneable
+			ProtocolVersion(1),
+			None, // don't pass in header if it's not pruneable
 		)?;
 
 		// Initialize the bitmap accumulator from the current output PMMR.
@@ -197,6 +211,7 @@ impl TxHashSet {
 				output_pmmr_h,
 				rproof_pmmr_h,
 				kernel_pmmr_h,
+				issue_pmmr_h,
 				bitmap_accumulator,
 				commit_index,
 			})
@@ -331,6 +346,7 @@ impl TxHashSet {
 			ReadonlyPMMR::at(&self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
 		let kernel_pmmr =
 			ReadonlyPMMR::at(&self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
+		let issue_pmmr = ReadonlyPMMR::at(&self.issue_pmmr_h.backend, self.issue_pmmr_h.last_pos);
 
 		TxHashSetRoots {
 			output_roots: OutputRoots {
@@ -339,6 +355,7 @@ impl TxHashSet {
 			},
 			rproof_root: rproof_pmmr.root(),
 			kernel_root: kernel_pmmr.root(),
+			issue_root: issue_pmmr.root(),
 		}
 	}
 
@@ -509,6 +526,7 @@ where
 	trees.output_pmmr_h.backend.discard();
 	trees.rproof_pmmr_h.backend.discard();
 	trees.kernel_pmmr_h.backend.discard();
+	trees.issue_pmmr_h.backend.discard();
 
 	trace!("TxHashSet (readonly) extension done.");
 
@@ -582,7 +600,7 @@ pub fn extending<'a, F, T>(
 where
 	F: FnOnce(&mut ExtensionPair<'_>, &Batch<'_>) -> Result<T, Error>,
 {
-	let sizes: (u64, u64, u64);
+	let sizes: (u64, u64, u64, u64);
 	let res: Result<T, Error>;
 	let rollback: bool;
 	let bitmap_accumulator: BitmapAccumulator;
@@ -626,6 +644,7 @@ where
 			trees.output_pmmr_h.backend.discard();
 			trees.rproof_pmmr_h.backend.discard();
 			trees.kernel_pmmr_h.backend.discard();
+			trees.issue_pmmr_h.backend.discard();
 			Err(e)
 		}
 		Ok(r) => {
@@ -634,15 +653,18 @@ where
 				trees.output_pmmr_h.backend.discard();
 				trees.rproof_pmmr_h.backend.discard();
 				trees.kernel_pmmr_h.backend.discard();
+				trees.issue_pmmr_h.backend.discard();
 			} else {
 				trace!("Committing txhashset extension. sizes {:?}", sizes);
 				child_batch.commit()?;
 				trees.output_pmmr_h.backend.sync()?;
 				trees.rproof_pmmr_h.backend.sync()?;
 				trees.kernel_pmmr_h.backend.sync()?;
+				trees.issue_pmmr_h.backend.sync()?;
 				trees.output_pmmr_h.last_pos = sizes.0;
 				trees.rproof_pmmr_h.last_pos = sizes.1;
 				trees.kernel_pmmr_h.last_pos = sizes.2;
+				trees.issue_pmmr_h.last_pos = sizes.3;
 
 				// Update our bitmap_accumulator based on our extension
 				trees.bitmap_accumulator = bitmap_accumulator;
@@ -854,6 +876,7 @@ pub struct Extension<'a> {
 
 	output_pmmr: PMMR<'a, Output, PMMRBackend<Output>>,
 	rproof_pmmr: PMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
+	issue_pmmr: PMMR<'a, IssuedAsset, PMMRBackend<IssuedAsset>>,
 	kernel_pmmr: PMMR<'a, TxKernel, PMMRBackend<TxKernel>>,
 
 	bitmap_accumulator: BitmapAccumulator,
@@ -874,6 +897,7 @@ impl<'a> Committed for Extension<'a> {
 				commitments.push(out.commit);
 			}
 		}
+
 		commitments
 	}
 
@@ -902,6 +926,7 @@ impl<'a> Extension<'a> {
 				&mut trees.rproof_pmmr_h.backend,
 				trees.rproof_pmmr_h.last_pos,
 			),
+			issue_pmmr: PMMR::at(&mut trees.issue_pmmr_h.backend, trees.issue_pmmr_h.last_pos),
 			kernel_pmmr: PMMR::at(
 				&mut trees.kernel_pmmr_h.backend,
 				trees.kernel_pmmr_h.last_pos,
@@ -926,12 +951,19 @@ impl<'a> Extension<'a> {
 		)
 	}
 
+	pub fn asset_view(&'a self, asset: &Asset, batch: &Batch) -> Option<IssuedAsset> {
+		if let Ok(issued_asset) = batch.get_issued_asset(asset) {
+			Some(issued_asset)
+		} else {
+			None
+		}
+	}
+
 	/// Apply a new block to the current txhashet extension (output, rangeproof, kernel MMRs).
 	/// Returns a vec of commit_pos representing the pos and height of the outputs spent
 	/// by this block.
 	pub fn apply_block(&mut self, b: &Block, batch: &Batch<'_>) -> Result<Vec<CommitPos>, Error> {
 		let mut affected_pos = vec![];
-		let mut spent = vec![];
 
 		// Apply the output to the output and rangeproof MMRs.
 		// Add pos to affected_pos to update the accumulator later on.
@@ -942,9 +974,24 @@ impl<'a> Extension<'a> {
 			batch.save_output_pos_height(&out.commitment(), pos, b.header.height)?;
 		}
 
+		for action in b.assets() {
+			if action.is_new() {
+				let asset = action.issued_asset().unwrap();
+				self.apply_issued_asset(&asset)?;
+				// did pmmr size change and root after?
+				println!(
+					"issue_root={}, issue mmr size: {}",
+					self.issue_pmmr.root().unwrap(),
+					self.issue_pmmr.unpruned_size()
+				);
+				batch.save_issued_asset(asset.asset(), &asset)?;
+			}
+		}
+
 		// Remove the output from the output and rangeproof MMRs.
 		// Add spent_pos to affected_pos to update the accumulator later on.
 		// Remove the spent output from the output_pos index.
+		let mut spent = vec![];
 		for input in b.inputs() {
 			let spent_pos = self.apply_input(input, batch)?;
 			affected_pos.push(spent_pos.pos);
@@ -1059,6 +1106,11 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	fn apply_issued_asset(&mut self, asset: &IssuedAsset) -> Result<(), Error> {
+		self.issue_pmmr.push(asset).map_err(&ErrorKind::AssetErr)?;
+		Ok(())
+	}
+
 	/// Build a Merkle proof for the given output and the block
 	/// this extension is currently referencing.
 	/// Note: this relies on the MMR being stable even after pruning/compaction.
@@ -1117,7 +1169,12 @@ impl<'a> Extension<'a> {
 
 		if head_header.height <= header.height {
 			// Nothing to rewind but we do want to truncate the MMRs at header for consistency.
-			self.rewind_mmrs_to_pos(header.output_mmr_size, header.kernel_mmr_size, &vec![])?;
+			self.rewind_mmrs_to_pos(
+				header.output_mmr_size,
+				header.kernel_mmr_size,
+				header.issue_mmr_size,
+				&vec![],
+			)?;
 			self.apply_to_bitmap_accumulator(&[header.output_mmr_size])?;
 		} else {
 			let mut current = head_header;
@@ -1155,10 +1212,15 @@ impl<'a> Extension<'a> {
 		};
 
 		if header.height == 0 {
-			self.rewind_mmrs_to_pos(0, 0, &spent_pos)?;
+			self.rewind_mmrs_to_pos(0, 0, 0, &spent_pos)?;
 		} else {
 			let prev = batch.get_previous_header(&header)?;
-			self.rewind_mmrs_to_pos(prev.output_mmr_size, prev.kernel_mmr_size, &spent_pos)?;
+			self.rewind_mmrs_to_pos(
+				prev.output_mmr_size,
+				prev.kernel_mmr_size,
+				prev.issue_mmr_size,
+				&spent_pos,
+			)?;
 		}
 
 		// Update our BitmapAccumulator based on affected outputs.
@@ -1204,6 +1266,7 @@ impl<'a> Extension<'a> {
 		&mut self,
 		output_pos: u64,
 		kernel_pos: u64,
+		issue_pos: u64,
 		spent_pos: &[u64],
 	) -> Result<(), Error> {
 		let bitmap: Bitmap = spent_pos.into_iter().map(|x| *x as u32).collect();
@@ -1215,6 +1278,9 @@ impl<'a> Extension<'a> {
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		self.kernel_pmmr
 			.rewind(kernel_pos, &Bitmap::create())
+			.map_err(&ErrorKind::TxHashSetErr)?;
+		self.issue_pmmr
+			.rewind(issue_pos, &Bitmap::create())
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		Ok(())
 	}
@@ -1238,6 +1304,7 @@ impl<'a> Extension<'a> {
 				.kernel_pmmr
 				.root()
 				.map_err(|_| ErrorKind::InvalidRoot)?,
+			issue_root: self.issue_pmmr.root().map_err(|_| ErrorKind::InvalidRoot)?,
 		})
 	}
 
@@ -1258,6 +1325,7 @@ impl<'a> Extension<'a> {
 			header.output_mmr_size,
 			header.output_mmr_size,
 			header.kernel_mmr_size,
+			header.issue_mmr_size,
 		) != self.sizes()
 		{
 			Err(ErrorKind::InvalidMMRSize.into())
@@ -1279,12 +1347,16 @@ impl<'a> Extension<'a> {
 		if let Err(e) = self.kernel_pmmr.validate() {
 			return Err(ErrorKind::InvalidTxHashSet(e).into());
 		}
+		if let Err(e) = self.issue_pmmr.validate() {
+			return Err(ErrorKind::InvalidTxHashSet(e).into());
+		}
 
 		debug!(
-			"txhashset: validated the output {}, rproof {}, kernel {} mmrs, took {}s",
+			"txhashset: validated the output {}, rproof {}, kernel {} mmrs, issue {} mmrs, took {}s",
 			self.output_pmmr.unpruned_size(),
 			self.rproof_pmmr.unpruned_size(),
 			self.kernel_pmmr.unpruned_size(),
+			self.issue_pmmr.unpruned_size(),
 			now.elapsed().as_secs(),
 		);
 
@@ -1304,6 +1376,7 @@ impl<'a> Extension<'a> {
 
 		let (utxo_sum, kernel_sum) = self.verify_kernel_sums(
 			header.total_overage(genesis.kernel_mmr_size > 0),
+			header.issue_overage(),
 			header.total_kernel_offset(),
 		)?;
 
@@ -1345,7 +1418,6 @@ impl<'a> Extension<'a> {
 			// Verify all the kernel signatures.
 			self.verify_kernel_signatures(status)?;
 		}
-
 		Ok((output_sum, kernel_sum))
 	}
 
@@ -1378,11 +1450,12 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Sizes of each of the MMRs
-	pub fn sizes(&self) -> (u64, u64, u64) {
+	pub fn sizes(&self) -> (u64, u64, u64, u64) {
 		(
 			self.output_pmmr.unpruned_size(),
 			self.rproof_pmmr.unpruned_size(),
 			self.kernel_pmmr.unpruned_size(),
+			self.issue_pmmr.unpruned_size(),
 		)
 	}
 
@@ -1425,13 +1498,7 @@ impl<'a> Extension<'a> {
 	}
 
 	fn verify_rangeproofs(&self, status: &dyn TxHashsetWriteStatus) -> Result<(), Error> {
-		let now = Instant::now();
-
-		let mut commits: Vec<Commitment> = Vec::with_capacity(1_000);
-		let mut proofs: Vec<RangeProof> = Vec::with_capacity(1_000);
-
-		let mut proof_count = 0;
-		let total_rproofs = self.output_pmmr.n_unpruned_leaves();
+		let mut all_commits: HashMap<Asset, (Vec<Commitment>, Vec<RangeProof>)> = HashMap::new();
 
 		for pos in self.output_pmmr.leaf_pos_iter() {
 			let output = self.output_pmmr.get_data(pos);
@@ -1443,44 +1510,33 @@ impl<'a> Extension<'a> {
 				(None, _) => return Err(ErrorKind::OutputNotFound.into()),
 				(_, None) => return Err(ErrorKind::RangeproofNotFound.into()),
 				(Some(output), Some(proof)) => {
-					commits.push(output.commit);
-					proofs.push(proof);
-				}
-			}
-
-			proof_count += 1;
-
-			if proofs.len() >= 1_000 {
-				Output::batch_verify_proofs(&commits, &proofs)?;
-				commits.clear();
-				proofs.clear();
-				debug!(
-					"txhashset: verify_rangeproofs: verified {} rangeproofs",
-					proof_count,
-				);
-				if proof_count % 1_000 == 0 {
-					status.on_validation_rproofs(proof_count, total_rproofs);
+					all_commits
+						.entry(output.asset)
+						.and_modify(|cr| {
+							cr.0.push(output.commit);
+							cr.1.push(proof);
+						})
+						.or_insert((vec![output.commit], vec![proof]));
 				}
 			}
 		}
 
-		// remaining part which not full of 1000 range proofs
-		if !proofs.is_empty() {
-			Output::batch_verify_proofs(&commits, &proofs)?;
-			commits.clear();
-			proofs.clear();
+		let total_rproofs = pmmr::n_leaves(self.output_pmmr.unpruned_size());
+		let mut proof_count = 0;
+
+		for (asset, (commits, proofs)) in all_commits.iter() {
+			Output::batch_verify_proofs(&commits, &proofs, &asset)?;
+
+			proof_count += proofs.len();
+
 			debug!(
 				"txhashset: verify_rangeproofs: verified {} rangeproofs",
 				proof_count,
 			);
+
+			status.on_validation_rproofs(proof_count as u64, total_rproofs);
 		}
 
-		debug!(
-			"txhashset: verified {} rangeproofs, pmmr size {}, took {}s",
-			proof_count,
-			self.rproof_pmmr.unpruned_size(),
-			now.elapsed().as_secs(),
-		);
 		Ok(())
 	}
 }
