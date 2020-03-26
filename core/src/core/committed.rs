@@ -86,7 +86,7 @@ pub trait Committed {
 	fn sum_commitments(
 		&self,
 		overage: i64,
-		mint_overage: Option<Commitment>,
+		issue_overage: Option<Commitment>,
 	) -> Result<Commitment, Error> {
 		// gather the commitments
 		let mut input_commits = self.inputs_committed();
@@ -108,8 +108,8 @@ pub trait Committed {
 			}
 		}
 
-		if let Some(mint_overage) = mint_overage {
-			input_commits.push(mint_overage);
+		if let Some(issue_overage) = issue_overage {
+			input_commits.push(issue_overage);
 		}
 
 		sum_commits(output_commits, input_commits)
@@ -132,11 +132,11 @@ pub trait Committed {
 	fn verify_kernel_sums(
 		&self,
 		overage: i64,
-		mint_overage: Option<Commitment>,
+		issue_overage: Option<Commitment>,
 		kernel_offset: BlindingFactor,
 	) -> Result<(Commitment, Commitment), Error> {
 		// Sum all input|output|overage commitments.
-		let utxo_sum = self.sum_commitments(overage, mint_overage)?;
+		let utxo_sum = self.sum_commitments(overage, issue_overage)?;
 
 		// Sum the kernel excesses accounting for the kernel offset.
 		let (kernel_sum, kernel_sum_plus_offset) = self.sum_kernel_excesses(&kernel_offset)?;

@@ -1612,7 +1612,7 @@ impl PMMRable for Output {
 
 	fn elmt_size() -> Option<u16> {
 		Some(
-			(1 + secp::constants::PEDERSEN_COMMITMENT_SIZE)
+			(1 + secp::constants::PEDERSEN_COMMITMENT_SIZE + secp::constants::GENERATOR_SIZE)
 				.try_into()
 				.unwrap(),
 		)
